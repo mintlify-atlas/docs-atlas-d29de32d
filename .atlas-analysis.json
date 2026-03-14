@@ -1,0 +1,137 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "GitAgent",
+  "projectDescription": "A framework-agnostic, git-native standard and CLI for defining, validating, and running AI agents across any framework.",
+  "theme": "palm",
+  "primaryColor": "#7c7c7c",
+  "lightColor": "#060606",
+  "darkColor": "#dedede",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/agent-structure",
+              "concepts/agent-manifest",
+              "concepts/skills",
+              "concepts/composition"
+            ]
+          },
+          {
+            "group": "Patterns",
+            "pages": [
+              "patterns/human-in-the-loop",
+              "patterns/live-memory",
+              "patterns/agent-versioning",
+              "patterns/cicd",
+              "patterns/branching"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "cli/init",
+              "cli/validate",
+              "cli/info",
+              "cli/export",
+              "cli/import",
+              "cli/install",
+              "cli/run",
+              "cli/audit",
+              "cli/skills",
+              "cli/lyzr"
+            ]
+          },
+          {
+            "group": "Adapters & Runners",
+            "pages": [
+              "adapters/overview",
+              "adapters/claude-code",
+              "adapters/openai",
+              "adapters/crewai",
+              "adapters/openclaw",
+              "adapters/nanobot",
+              "adapters/lyzr",
+              "adapters/github",
+              "adapters/git-auto-detect"
+            ]
+          },
+          {
+            "group": "Compliance",
+            "pages": [
+              "compliance/overview",
+              "compliance/risk-tiers",
+              "compliance/finra",
+              "compliance/federal-reserve",
+              "compliance/sec-cfpb",
+              "compliance/segregation-of-duties",
+              "compliance/audit"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/minimal",
+              "examples/standard",
+              "examples/full",
+              "examples/lyzr-agent"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Specification",
+        "groups": [
+          {
+            "group": "Spec",
+            "pages": [
+              "spec/overview",
+              "spec/agent-yaml",
+              "spec/soul",
+              "spec/skills-schema",
+              "spec/tools-schema",
+              "spec/hooks-schema",
+              "spec/knowledge-schema",
+              "spec/memory-schema",
+              "spec/workflows-schema"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Git-native agent definitions — every agent is a versioned git repository",
+    "Framework-agnostic export to Claude Code, OpenAI, CrewAI, OpenClaw, Nanobot, Lyzr, and GitHub Models",
+    "CLI tooling: init, validate, export, import, run, audit, and skills management",
+    "First-class financial regulatory compliance (FINRA, Federal Reserve, SEC, CFPB)",
+    "Composable agents with inheritance, dependencies, and sub-agent delegation",
+    "Skills system with registry search, install, and discovery (agentskills.io compatible)",
+    "Human-in-the-loop and Segregation of Duties enforcement",
+    "Git caching for fast repeated runs from remote repos"
+  ],
+  "publicApiSurface": [
+    "gitagent init [--template minimal|standard|full] [--dir]",
+    "gitagent validate [--dir] [--compliance]",
+    "gitagent info [--dir]",
+    "gitagent export --format <system-prompt|claude-code|openai|crewai|openclaw|nanobot|lyzr|github> [--dir] [--output]",
+    "gitagent import --from <claude|cursor|crewai> <path> [--dir]",
+    "gitagent install [--dir]",
+    "gitagent run [--repo|--dir] [--adapter] [--branch] [--prompt]",
+    "gitagent audit [--dir]",
+    "gitagent skills search|install|list|info",
+    "gitagent lyzr create|update|info|run"
+  ]
+}
