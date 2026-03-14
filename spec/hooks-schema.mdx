@@ -1,0 +1,200 @@
+---
+title: 'Hooks schema'
+description: 'Lifecycle event handlers in hooks/hooks.yaml. Complete reference for hook types, the I/O protocol, and Claude Code mapping.'
+---
+
+Hooks are lifecycle event handlers that run scripts at defined points in an agent session. They are configured in `hooks/hooks.yaml` and implemented as scripts in `hooks/scripts/`.
+
+## Directory structure
+
+```
+hooks/
+├── hooks.yaml          # Hook configuration
+└── scripts/            # Hook implementations
+    ├── load-compliance-context.sh
+    ├── audit-tool-call.sh
+    └── escalate-error.sh
+```
+
+## hooks.yaml format
+
+The `hooks.yaml` file has a single top-level `hooks` key containing event-keyed lists of hook entries.
+
+```yaml
+hooks:
+  on_session_start:
+    - script: scripts/load-compliance-context.sh
+      description: Load regulatory context for session
+      timeout: 10
+      compliance: true
+      fail_open: false
+
+  pre_tool_use:
+    - script: scripts/audit-tool-call.sh
+      description: Log tool invocation for audit trail
+      compliance: true
+
+  post_response:
+    - script: scripts/check-communications-compliance.sh
+      description: Verify response meets FINRA 2210 standards
+      compliance: true
+
+  on_error:
+    - script: scripts/escalate-error.sh
+      description: Escalate errors to designated supervisor
+      fail_open: true
+```
+
+## Hook types
+
+| Hook type | When it fires |
+|---|---|
+| `on_session_start` | When the agent session begins |
+| `pre_tool_use` | Before a tool is invoked |
+| `post_tool_use` | After a tool returns |
+| `pre_response` | Before the agent sends a response |
+| `post_response` | After the agent sends a response |
+| `on_error` | When an error occurs |
+| `on_session_end` | When the agent session ends |
+
+## Hook entry fields
+
+<ParamField path="script" type="string" required>
+  Path to the hook script, relative to the `hooks/` directory.
+
+  ```yaml
+  script: scripts/audit-tool-call.sh
+  ```
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Human-readable description of what this hook does.
+</ParamField>
+
+<ParamField path="timeout" type="integer">
+  Timeout in seconds. Default: `30`.
+</ParamField>
+
+<ParamField path="compliance" type="boolean">
+  Whether this hook is required for regulatory compliance. Default: `false`. Compliance hooks are highlighted in `gitagent audit` reports.
+</ParamField>
+
+<ParamField path="fail_open" type="boolean">
+  If `false` (default), a hook failure blocks the action. If `true`, a hook failure allows the action to proceed. Set `fail_open: true` for hooks where failure should not halt the agent (e.g., error escalation hooks, where you don't want the escalation failure to compound the original error).
+</ParamField>
+
+## Hook I/O protocol
+
+Hook scripts receive a JSON object on stdin and must return a JSON object on stdout.
+
+### Input (stdin)
+
+```json
+{
+  "event": "pre_tool_use",
+  "timestamp": "2026-02-16T12:00:00Z",
+  "data": {
+    "tool_name": "search-regulations",
+    "arguments": { "query": "FINRA Rule 3110" }
+  },
+  "session": {
+    "id": "sess_abc123",
+    "agent": "compliance-analyst",
+    "model_version": "claude-opus-4-6",
+    "turn": 3
+  }
+}
+```
+
+**Input fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `event` | string | The lifecycle event that triggered this hook |
+| `timestamp` | string | ISO 8601 timestamp |
+| `data` | object | Event-specific payload (see below) |
+| `session.id` | string | Session identifier |
+| `session.agent` | string | Agent name |
+| `session.model_version` | string | Model being used |
+| `session.turn` | integer | Current conversation turn number |
+
+**Event-specific data fields:**
+
+| Event | Available data fields |
+|---|---|
+| `pre_tool_use` | `tool_name`, `arguments` |
+| `post_tool_use` | `tool_name`, `result` |
+| `pre_response`, `post_response` | `response` (agent response text) |
+| `on_error` | `error.message`, `error.code`, `error.stack` |
+
+### Output (stdout)
+
+```json
+{
+  "action": "allow",
+  "modifications": null,
+  "audit": {
+    "logged": true,
+    "log_id": "audit_xyz789"
+  }
+}
+```
+
+**Output fields:**
+
+<ParamField path="action" type="string" required>
+  What to do after this hook:
+  - `allow` — proceed as normal
+  - `block` — prevent the action from proceeding
+  - `modify` — proceed with modifications specified in `modifications`
+</ParamField>
+
+<ParamField path="modifications" type="object | null">
+  Modified data when `action: modify`. Structure matches the input `data` field. Use `null` when not modifying.
+</ParamField>
+
+<ParamField path="reason" type="string">
+  Human-readable reason for `block` or `modify` actions.
+</ParamField>
+
+<ParamField path="audit" type="object">
+  Audit metadata to attach to the event log.
+
+  | Field | Type | Description |
+  |---|---|---|
+  | `logged` | boolean | Whether event was written to the audit log |
+  | `log_id` | string | Identifier of the audit log entry |
+  | `timestamp` | string | ISO 8601 timestamp |
+  | `escalated` | boolean | Whether event was escalated to a supervisor |
+  | `finalized` | boolean | Whether the audit log was sealed |
+</ParamField>
+
+## Claude Code mapping
+
+When running with the Claude adapter, gitagent hooks are mapped to Claude Code's native hook events:
+
+| gitagent hook | Claude Code event |
+|---|---|
+| `on_session_start` | `PreToolUse` |
+| `pre_tool_use` | `PreToolUse` |
+| `post_tool_use` | `PostToolUse` |
+| `pre_response` | `PostToolUse` |
+| `post_response` | `PostToolUse` |
+| `on_error` | `PostToolUse` |
+| `on_session_end` | `PostToolUse` |
+
+## Validation
+
+`gitagent validate` checks:
+
+1. `hooks.yaml` is valid YAML
+2. The `hooks` key exists
+3. Each hook entry has `script` and `description`
+4. Each referenced script exists at the specified path (relative to `hooks/`)
+
+## JSON schemas
+
+Two schemas cover hooks:
+
+- **`spec/schemas/hooks.schema.json`** — validates `hooks/hooks.yaml`
+- **`spec/schemas/hook-io.schema.json`** — validates the stdin/stdout JSON protocol used by hook scripts

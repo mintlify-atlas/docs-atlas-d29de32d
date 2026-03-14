@@ -1,0 +1,361 @@
+---
+title: 'Full compliance agent example'
+description: 'A production-ready financial compliance agent with every directory, full compliance configuration, hooks, SOD, and regulatory artifacts.'
+---
+
+The full example is a production-ready compliance analyst agent for FINRA and Federal Reserve regulated environments. It exercises every gitagent directory and demonstrates the complete compliance configuration — supervision, recordkeeping, model risk, data governance, communications, vendor management, and segregation of duties.
+
+## Directory structure
+
+```
+examples/full/
+├── agent.yaml              # Full compliance configuration
+├── SOUL.md                 # Compliance analyst identity
+├── RULES.md                # Regulatory constraints
+├── AGENTS.md               # Framework-agnostic fallback instructions
+├── DUTIES.md               # System-wide SOD policy
+├── agents/
+│   └── fact-checker/       # Sub-agent (full directory form)
+├── compliance/
+│   ├── risk-assessment.md
+│   ├── regulatory-map.yaml
+│   └── validation-schedule.yaml
+├── config/
+│   ├── default.yaml
+│   └── production.yaml
+├── examples/
+│   ├── good-outputs.md
+│   ├── bad-outputs.md
+│   └── scenarios/
+├── hooks/
+│   ├── hooks.yaml
+│   └── scripts/
+├── knowledge/
+│   ├── index.yaml
+│   └── *.md
+├── memory/
+│   ├── MEMORY.md
+│   └── memory.yaml
+├── skills/
+│   ├── document-review/
+│   └── regulatory-analysis/
+├── tools/
+│   ├── generate-report.yaml
+│   └── search-regulations.yaml
+└── workflows/
+    └── regulatory-review.yaml
+```
+
+## Key files
+
+### agent.yaml — compliance configuration
+
+The `compliance` section is the most detailed part of this agent's manifest. It configures every compliance sub-section required for a `risk_tier: high` agent.
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.0.0
+description: Financial compliance analysis agent for FINRA and Federal Reserve regulated environments
+author: gitagent-examples
+license: proprietary
+model:
+  preferred: claude-opus-4-6
+  fallback:
+    - claude-sonnet-4-5-20250929
+  constraints:
+    temperature: 0.1
+    max_tokens: 8192
+skills:
+  - regulatory-analysis
+  - document-review
+tools:
+  - search-regulations
+  - generate-report
+agents:
+  fact-checker:
+    description: Verifies factual claims against authoritative sources
+    delegation:
+      mode: auto
+      triggers:
+        - factual_claim_detected
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+  supervision:
+    designated_supervisor: chief-compliance-officer
+    review_cadence: monthly
+    human_in_the_loop: always
+    escalation_triggers:
+      - confidence_below: 0.85
+      - action_type: regulatory_filing
+      - action_type: customer_communication
+      - action_type: credit_decision
+      - error_detected: true
+    override_capability: true
+    kill_switch: true
+  recordkeeping:
+    audit_logging: true
+    log_format: structured_json
+    retention_period: 7y
+    log_contents:
+      - prompts_and_responses
+      - tool_calls
+      - decision_pathways
+      - model_version
+      - timestamps
+    immutable: true
+  model_risk:
+    inventory_id: MRM-2026-0047
+    validation_cadence: quarterly
+    validation_type: full
+    conceptual_soundness: compliance/risk-assessment.md
+    ongoing_monitoring: true
+    outcomes_analysis: true
+    drift_detection: true
+    parallel_testing: false
+  data_governance:
+    pii_handling: redact
+    data_classification: restricted
+    consent_required: true
+    cross_border: false
+    bias_testing: true
+    lda_search: true
+  communications:
+    type: institutional
+    pre_review_required: true
+    fair_balanced: true
+    no_misleading: true
+    disclosures_required: true
+  vendor_management:
+    due_diligence_complete: true
+    soc_report_required: true
+    vendor_ai_notification: true
+    subcontractor_assessment: true
+  segregation_of_duties:
+    roles:
+      - id: analyst
+        description: Performs regulatory analysis and generates findings
+        permissions: [create, submit]
+      - id: reviewer
+        description: Reviews analysis for accuracy and completeness
+        permissions: [review, approve, reject]
+      - id: auditor
+        description: Audits completed reviews and maintains compliance trail
+        permissions: [audit, report]
+    conflicts:
+      - [analyst, reviewer]
+      - [analyst, auditor]
+      - [reviewer, auditor]
+    assignments:
+      compliance-analyst: [analyst]
+      fact-checker: [reviewer]
+    isolation:
+      state: full
+      credentials: separate
+    handoffs:
+      - action: regulatory_filing
+        required_roles: [analyst, reviewer]
+        approval_required: true
+      - action: customer_communication
+        required_roles: [analyst, reviewer]
+        approval_required: true
+    enforcement: strict
+tags:
+  - compliance
+  - financial-services
+  - regulated
+  - finra
+  - federal-reserve
+metadata:
+  department: compliance
+  cost_center: CC-COMPLIANCE-001
+  data_sensitivity: high
+```
+
+<AccordionGroup>
+  <Accordion title="supervision — FINRA Rule 3110">
+    Configures human oversight requirements. For `risk_tier: high`, `human_in_the_loop` must be `always` or `conditional`.
+
+    - `designated_supervisor` — Named principal responsible for oversight
+    - `review_cadence` — How often the agent is reviewed (`daily`, `weekly`, `monthly`, `quarterly`, etc.)
+    - `human_in_the_loop: always` — Every agent decision requires human review
+    - `escalation_triggers` — Typed conditions that trigger escalation (`confidence_below`, `action_type`, `error_detected`)
+    - `override_capability: true` — Humans can override any agent decision
+    - `kill_switch: true` — Agent can be immediately halted
+  </Accordion>
+  <Accordion title="recordkeeping — FINRA Rule 4511 / SEC 17a-4">
+    Configures audit logging and record retention. For `risk_tier: high`, `audit_logging: true` is required.
+
+    - `log_format: structured_json` — Machine-parseable audit entries
+    - `retention_period: 7y` — 7-year retention (exceeds the 6-year FINRA minimum)
+    - `log_contents` — What categories of data to log (full I/O, tool calls, decision pathways, model version, timestamps)
+    - `immutable: true` — Logs are write-once (WORM), required for SEC 17a-4 compliance
+  </Accordion>
+  <Accordion title="model_risk — SR 11-7">
+    Configures model risk management per the Federal Reserve's SR 11-7 guidance.
+
+    - `inventory_id` — Registration ID in the firm's model inventory
+    - `validation_cadence: quarterly` — Validated four times per year
+    - `validation_type: full` — Three-pillar SR 11-7 validation (conceptual soundness, ongoing monitoring, outcomes analysis)
+    - `conceptual_soundness` — Points to `compliance/risk-assessment.md`
+    - `ongoing_monitoring: true`, `outcomes_analysis: true`, `drift_detection: true` — All continuous monitoring controls enabled
+  </Accordion>
+  <Accordion title="segregation_of_duties">
+    Configures the SOD policy. Three roles are defined: `analyst`, `reviewer`, `auditor`. No single agent may hold conflicting role pairs. Handoffs require multi-role participation with explicit approval.
+
+    The `compliance-analyst` is assigned the `analyst` role. The `fact-checker` sub-agent is assigned the `reviewer` role. The `auditor` role is unassigned, pending a dedicated audit agent.
+
+    `enforcement: strict` means any SOD violation fails `gitagent validate` and blocks deployment.
+  </Accordion>
+</AccordionGroup>
+
+### hooks/hooks.yaml
+
+Hooks fire at every lifecycle event. In the full example, all hooks are compliance-flagged and set `fail_open: false` — meaning a hook failure blocks the action.
+
+```yaml
+hooks:
+  on_session_start:
+    - script: scripts/load-compliance-context.sh
+      description: Load regulatory context and verify compliance configuration
+      timeout: 10
+      compliance: true
+      fail_open: false
+
+  pre_tool_use:
+    - script: scripts/audit-tool-call.sh
+      description: Log tool invocation to immutable audit trail
+      timeout: 5
+      compliance: true
+      fail_open: false
+
+  post_tool_use:
+    - script: scripts/validate-tool-output.sh
+      description: Check tool output for PII and compliance violations
+      timeout: 10
+      compliance: true
+      fail_open: false
+
+  pre_response:
+    - script: scripts/check-communications-compliance.sh
+      description: Verify response meets FINRA 2210 fair/balanced standards
+      timeout: 15
+      compliance: true
+      fail_open: false
+
+  post_response:
+    - script: scripts/audit-response.sh
+      description: Log response to audit trail with model version and timestamp
+      timeout: 5
+      compliance: true
+      fail_open: false
+
+  on_error:
+    - script: scripts/escalate-error.sh
+      description: Escalate errors to designated supervisor per FINRA 3110
+      timeout: 10
+      compliance: true
+      fail_open: true
+
+  on_session_end:
+    - script: scripts/finalize-audit-log.sh
+      description: Seal audit log and verify retention compliance
+      timeout: 15
+      compliance: true
+      fail_open: false
+```
+
+<Note>
+  The `on_error` hook uses `fail_open: true` so that error escalation failures do not compound the original error. All other hooks use `fail_open: false` because compliance logging is mandatory.
+</Note>
+
+### compliance/ artifacts
+
+For `risk_tier: high` and `critical` agents, gitagent expects a `compliance/` directory with regulatory artifacts.
+
+**`compliance/risk-assessment.md`** — Risk tier justification document. Classifies inherent and residual risk per capability, lists applicable regulatory frameworks, and documents mitigation controls. Referenced by `model_risk.conceptual_soundness` in `agent.yaml`.
+
+**`compliance/regulatory-map.yaml`** — Maps each agent capability to the specific regulatory rules and controls that govern it:
+
+```yaml
+mappings:
+  - capability: customer_communication
+    rules:
+      - id: finra-2210
+        name: "FINRA Rule 2210 — Communications with the Public"
+        controls:
+          - fair_balanced_check
+          - no_misleading_check
+          - principal_pre_review
+      - id: finra-4511
+        name: "FINRA Rule 4511 — Books and Records"
+        controls:
+          - communication_retention
+          - immutable_audit_trail
+```
+
+**`compliance/validation-schedule.yaml`** — Validation cadence schedule for SR 11-7 model risk, quarterly bias testing, monthly supervisory review, and weekly communications sampling.
+
+### DUTIES.md — SOD policy
+
+`DUTIES.md` at the root level documents the system-wide segregation of duties policy. It serves as the human-readable complement to the `segregation_of_duties` section in `agent.yaml`.
+
+```markdown
+# Duties
+
+## Roles
+
+| Role    | Agent              | Permissions         |
+|---------|--------------------|---------------------|
+| Analyst | compliance-analyst | create, submit      |
+| Reviewer| fact-checker       | review, approve, reject |
+| Auditor | (unassigned)       | audit, report       |
+
+## Conflict Matrix
+- Analyst <-> Reviewer — the agent that produces findings cannot approve them
+- Analyst <-> Auditor — the agent that produces findings cannot audit them
+- Reviewer <-> Auditor — the agent that approves findings cannot audit the approval
+
+## Enforcement
+Enforcement mode is strict. Any SOD violation will fail validation and block deployment.
+```
+
+## How to audit
+
+<Steps>
+  <Step title="Generate a compliance audit report">
+    ```bash
+    gitagent audit -d ./examples/full
+    ```
+
+    Produces a section-by-section compliance checklist covering all 9 audit areas: Risk Classification, Supervision, Recordkeeping, Model Risk, Data Governance, Communications, Vendor Management, Compliance Artifacts, and Audit Hooks.
+  </Step>
+</Steps>
+
+## How to validate
+
+<Steps>
+  <Step title="Standard validation">
+    ```bash
+    gitagent validate -d ./examples/full
+    ```
+
+    Checks agent.yaml against the JSON schema, verifies that all referenced skills, tools, and agents exist, and validates hooks scripts are present.
+  </Step>
+  <Step title="Compliance validation">
+    ```bash
+    gitagent validate --compliance -d ./examples/full
+    ```
+
+    Adds regulatory checks: risk tier requirements, FINRA fair/balanced enforcement, Federal Reserve model risk section, SEC audit logging, CFPB bias testing, compliance artifacts directory, and vendor management metadata.
+  </Step>
+</Steps>
+
+<Warning>
+  The full example uses `enforcement: strict` for segregation of duties. Any configuration where the same agent holds conflicting roles (e.g., `analyst` and `reviewer`) will fail `gitagent validate` and block deployment.
+</Warning>

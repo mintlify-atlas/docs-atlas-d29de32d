@@ -1,0 +1,228 @@
+---
+title: "Skills system"
+description: "Reusable capability modules following the Agent Skills open standard. Drop a SKILL.md into skills/ and the agent gains a new capability."
+---
+
+Skills are reusable capability modules. Each skill lives in its own subdirectory under `skills/` and is defined by a `SKILL.md` file with YAML frontmatter and instruction content.
+
+gitagent fully adopts the **Agent Skills** open standard ([agentskills.io](https://agentskills.io)). Any valid Agent Skills skill works in gitagent with no modification, and gitagent skills work in Claude Code, Codex, VS Code, Cursor, Gemini CLI, and all other tools that support the standard.
+
+## Skill structure
+
+```
+skills/
+└── code-review/
+    ├── SKILL.md        # Required: frontmatter + instructions
+    ├── scripts/        # Optional: executable helpers
+    ├── references/     # Optional: supporting documents
+    ├── assets/         # Optional: templates, schemas
+    ├── agents/         # Optional: skill-specific agent config
+    └── examples/       # Optional: example inputs/outputs
+```
+
+Only `SKILL.md` is required. The subdirectories are optional and available when the skill needs them.
+
+## SKILL.md format
+
+Every skill is defined by a `SKILL.md` file with YAML frontmatter followed by instructions:
+
+```markdown
+---
+name: code-review
+description: Performs thorough code reviews with security analysis and best-practice enforcement
+license: MIT
+compatibility: ">=0.1.0"
+allowed-tools: Read Edit Grep Glob Bash
+metadata:
+  author: "Jane Doe"
+  version: "1.0.0"
+  category: "developer-tools"
+---
+
+# Instructions
+
+Review the code for:
+- Security vulnerabilities (flag OWASP Top 10 as CRITICAL)
+- Performance issues
+- Code style consistency
+- Test coverage gaps
+
+Categorize every finding as CRITICAL, WARNING, or SUGGESTION.
+Always suggest a specific fix, not just a description of the problem.
+```
+
+### Frontmatter fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `name` | **Yes** | string | Skill identifier. Kebab-case, max 64 chars, no leading/trailing hyphens, no `--` |
+| `description` | **Yes** | string | What the skill does. Max 1024 characters |
+| `license` | No | string | SPDX identifier (e.g. `MIT`) or `proprietary` |
+| `compatibility` | No | string | Free-text compatibility notes, max 500 chars |
+| `allowed-tools` | No | string | Space-delimited tool names the skill may use |
+| `metadata` | No | map | String-to-string key-value pairs for arbitrary metadata |
+
+<Note>
+  gitagent-specific extensions like `category`, `risk_tier`, and `regulatory_frameworks` belong inside `metadata` — not as top-level frontmatter fields. This preserves full portability with other tools that use the Agent Skills standard.
+</Note>
+
+The `allowed-tools` field is a space-delimited list:
+
+```yaml
+allowed-tools: Read Edit Grep Glob Bash
+```
+
+Instruction content should stay under approximately 5000 tokens (~20,000 characters).
+
+### Compliance skill example
+
+A skill with regulatory context stored in `metadata`:
+
+```markdown
+---
+name: regulatory-analysis
+description: Analyze documents for regulatory compliance against FINRA and SEC rules
+license: proprietary
+allowed-tools: search-regulations
+metadata:
+  author: gitagent-examples
+  version: "1.0.0"
+  category: compliance
+  risk_tier: high
+  regulatory_frameworks: finra,sec,federal_reserve,cfpb
+---
+
+# Regulatory Analysis
+
+## Instructions
+When analyzing a document for regulatory compliance:
+1. Identify the applicable regulatory framework
+2. Map document contents to specific rules
+3. Flag potential violations with rule citations
+4. Recommend remediation steps
+
+## Output Format
+Use structured findings with severity levels: CRITICAL, HIGH, MEDIUM, LOW.
+```
+
+## Referencing skills in agent.yaml
+
+Activate skills by listing their names in `agent.yaml`:
+
+```yaml
+skills:
+  - code-review
+  - security-audit
+```
+
+The name must match the `name` field in the skill's `SKILL.md` frontmatter and the directory name under `skills/`.
+
+## Skill discovery
+
+gitagent discovers skills from multiple locations in priority order. When two locations contain a skill with the same name, the higher-priority location wins.
+
+| Priority | Path | Source label |
+|----------|------|--------------|
+| 1 (highest) | `<agentDir>/skills/` | `agent` |
+| 2 | `<agentDir>/.agents/skills/` | `agentskills` |
+| 3 | `<agentDir>/.claude/skills/` | `claude` |
+| 4 | `<agentDir>/.github/skills/` | `github` |
+| 5 (lowest) | `~/.agents/skills/` | `personal` |
+
+The agent-local `skills/` directory always takes precedence. The personal directory at `~/.agents/skills/` is the global fallback for skills shared across multiple agents.
+
+## Progressive loading
+
+The skills system uses a two-tier loading model to minimize token consumption:
+
+| Mode | Tokens | Contents | Used for |
+|------|--------|----------|----------|
+| **Metadata** | ~100 tokens | `name` + `description` only | Listing, routing, display |
+| **Full** | ≤5000 tokens recommended | Complete frontmatter + instructions | Active skill use |
+
+When running `gitagent skills list`, only metadata is loaded. When the agent activates a skill for a task, the full content is loaded.
+
+## Skills CLI
+
+Manage skills with the `gitagent skills` subcommand:
+
+```bash
+# Search for skills in a registry
+gitagent skills search "code review"
+gitagent skills search "compliance" --provider github
+
+# Install a skill globally
+gitagent skills install code-review --global
+
+# Install a skill for a specific agent
+gitagent skills install security-audit --dir ./my-agent
+
+# Install directly from GitHub
+gitagent skills install owner/repo#path/to/skill --provider github
+
+# List all discovered skills
+gitagent skills list
+gitagent skills list --local   # agent-local skills only
+
+# Show skill details
+gitagent skills info code-review
+```
+
+## Registry providers
+
+Skills can be installed from three types of sources:
+
+<AccordionGroup>
+
+<Accordion title="skillsmp — SkillsMP marketplace (default)">
+
+The default registry. Searches and installs from the SkillsMP REST API.
+
+```bash
+gitagent skills search "code review"
+gitagent skills install code-review
+```
+
+API base: `https://api.skillsmp.com`
+
+</Accordion>
+
+<Accordion title="github — GitHub repositories">
+
+Install skills directly from GitHub using the `owner/repo#path/to/skill` format:
+
+```bash
+gitagent skills install owner/repo#path/to/skill --provider github
+```
+
+GitAgent uses GitHub's code search API to find skills and sparse-clones the specified path.
+
+</Accordion>
+
+<Accordion title="local — Filesystem path">
+
+Copy a skill from a local path:
+
+```bash
+gitagent skills install ./path/to/my-skill --provider local
+```
+
+Useful for sharing skills across agents on the same machine without a registry.
+
+</Accordion>
+
+</AccordionGroup>
+
+You can also configure custom registries in `agent.yaml`:
+
+```yaml
+registries:
+  - name: skillsmp
+    url: https://api.skillsmp.com
+  - name: enterprise
+    url: https://skills.internal.company.com
+```
+
+<Tip>
+  Install skills globally with `--global` to make them available to all agents without adding them to each agent's `skills/` directory. Global skills are stored at `~/.agents/skills/`.
+</Tip>

@@ -1,0 +1,124 @@
+---
+title: 'GitHub Models adapter'
+description: 'Send streaming chat completions to the GitHub Models API using any GitHub-hosted model.'
+---
+
+The GitHub Models adapter exports your agent as a chat completions payload for the GitHub Models API (which is OpenAI-compatible). The runner streams the response token-by-token to stdout.
+
+## Export format
+
+Running `gitagent export --format github` produces a JSON payload ready for the GitHub Models chat completions endpoint.
+
+```bash
+gitagent export --format github
+gitagent export --format github -d ./my-agent
+```
+
+### Payload structure
+
+```json
+{
+  "model": "openai/gpt-4.1",
+  "messages": [
+    {
+      "role": "system",
+      "content": "<full system prompt from agent definition>"
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 4096,
+  "stream": true
+}
+```
+
+`stream` is always `true`. The runner handles server-sent events (SSE) and writes content chunks to stdout in real time.
+
+### Field sources
+
+| Field | Source |
+|-------|--------|
+| `model` | Resolved from `agent.yaml` → `model.preferred` using namespace mapping (see below) |
+| `messages[0].content` | Full system prompt (SOUL + RULES + skills + compliance + knowledge + memory) |
+| `temperature` | `model.constraints.temperature` → `0.3` |
+| `max_tokens` | `model.constraints.max_tokens` → `4096` |
+| `stream` | Always `true` |
+
+### Model namespace mapping
+
+Model names in `agent.yaml` are automatically prefixed with the correct GitHub Models vendor namespace. If the model name already contains a `/`, it is passed through unchanged.
+
+| Model prefix | GitHub Models namespace | Example |
+|-------------|------------------------|--------|
+| `gpt-*`, `o1-*`, `o3-*`, `o4-*` | `openai/` | `gpt-4.1` → `openai/gpt-4.1` |
+| `claude-*` | `anthropic/` | `claude-sonnet-4-5` → `anthropic/claude-sonnet-4-5` |
+| `llama-*`, `Llama-*` | `meta/` | `llama-4-scout` → `meta/llama-4-scout` |
+| `mistral-*`, `Mistral-*` | `mistralai/` | `mistral-large` → `mistralai/mistral-large` |
+| `gemini-*` | `google/` | `gemini-2.0-flash` → `google/gemini-2.0-flash` |
+| `deepseek-*`, `DeepSeek-*` | `deepseek/` | `deepseek-r1` → `deepseek/deepseek-r1` |
+| `cohere-*` | `cohere/` | `cohere-command-r` → `cohere/cohere-command-r` |
+| Already namespaced | Passed through | `openai/gpt-4.1` → `openai/gpt-4.1` |
+| *(unrecognized, no model set)* | Default | `openai/gpt-4.1` |
+
+**Default model:** `openai/gpt-4.1` — used when `agent.yaml` has no `model.preferred` set.
+
+## Runner behavior
+
+<Steps>
+  <Step title="Verify token">
+    Checks for `GITHUB_TOKEN` or `GH_TOKEN` in the environment (or `--token` flag). Exits with an error if neither is set.
+  </Step>
+  <Step title="Require prompt">
+    GitHub Models does not have an interactive mode. If `-p` is not provided, the runner exits with an error.
+  </Step>
+  <Step title="Build system prompt">
+    Generates the full system prompt from the agent definition (SOUL + RULES + skills + compliance + knowledge + memory).
+  </Step>
+  <Step title="Resolve model">
+    Maps `model.preferred` to a GitHub Models namespace using the table above.
+  </Step>
+  <Step title="Send streaming request">
+    POSTs to `https://models.github.ai/inference/chat/completions` with `stream: true`. The request includes both a system message (agent definition) and a user message (the prompt).
+  </Step>
+  <Step title="Stream to stdout">
+    Reads the SSE response body, parses each `data: <json>` line, and writes `choices[0].delta.content` to stdout as it arrives. Prints a final newline when done.
+  </Step>
+</Steps>
+
+```bash
+export GITHUB_TOKEN="ghp_..."
+gitagent run -d ./my-agent -a github -p "Review my authentication code"
+```
+
+### API endpoint
+
+`POST https://models.github.ai/inference/chat/completions`
+
+The endpoint is OpenAI-compatible. The `Authorization` header uses `Bearer <GITHUB_TOKEN>`.
+
+## Requirements
+
+- `GITHUB_TOKEN` or `GH_TOKEN` with `models:read` scope
+- `-p` prompt is required
+
+<Tip>
+Generate a token at [github.com/settings/tokens](https://github.com/settings/tokens). Enable the `models:read` scope.
+</Tip>
+
+<Warning>
+This adapter always streams. The response is printed token-by-token to stdout and cannot be buffered or suppressed with current runner options.
+</Warning>
+
+### Using a non-default model
+
+Set `model.preferred` in `agent.yaml` to target any GitHub-hosted model:
+
+```yaml
+# agent.yaml
+model:
+  preferred: meta/llama-4-scout   # already namespaced, passed through
+```
+
+```yaml
+model:
+  preferred: claude-sonnet-4-5    # auto-namespaced to anthropic/claude-sonnet-4-5
+```

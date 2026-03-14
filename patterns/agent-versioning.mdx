@@ -1,0 +1,180 @@
+---
+title: "Agent versioning"
+description: "Every change to your agent is a git commit. Roll back broken prompts, revert bad skills, and compare versions with standard git tooling."
+---
+
+Because gitagent agents live entirely in git repositories, every change to an agent — a prompt edit, a new skill, a compliance update — is a commit. This gives you a full undo history for your agent, with all of git's comparison and rollback tools working out of the box.
+
+## Every agent change is a commit
+
+Agent identity lives in plain text files (`SOUL.md`, `RULES.md`, `agent.yaml`, `skills/`). Every edit produces a diff. Every diff can be committed, tagged, branched, reverted, or cherry-picked using standard git commands — no special tooling required.
+
+```bash
+# See the full history of agent changes
+git log --oneline
+
+# See what changed in the last commit
+git show HEAD
+
+# See changes to the agent identity over time
+git log --oneline SOUL.md
+```
+
+## Tagging stable releases
+
+Tag stable agent versions the same way you tag software releases:
+
+```bash
+# Tag a stable release
+git tag v1.0.0
+git tag v1.1.0
+
+# Push tags to remote
+git push origin --tags
+```
+
+Use semantic versioning — `v1.0.0`, `v1.1.0`, `v2.0.0` — to communicate the scope of changes. A bump in the minor version (`v1.0.0` → `v1.1.0`) signals a new skill or capability. A major bump (`v1.x` → `v2.0.0`) signals breaking changes to behavior.
+
+<Tip>
+  The `version` field in `agent.yaml` should match your git tags. Keep them in sync so `gitagent info` always shows the deployed version.
+</Tip>
+
+## Pinning to a specific version
+
+Use `--branch` with `gitagent run` to pin execution to a specific tag or branch:
+
+```bash
+# Run the agent pinned to the v1.0.0 release
+gitagent run -r https://github.com/org/my-agent -b v1.0.0
+
+# Run the current development branch
+gitagent run -r https://github.com/org/my-agent -b develop
+
+# Run with --refresh to pull the latest state of the branch
+gitagent run -r https://github.com/org/my-agent -b main --refresh
+```
+
+This lets you run production on a pinned tag while testing new versions on a branch — the agent equivalent of pinning a Docker image tag.
+
+## Comparing versions with git diff
+
+`git diff` shows exactly what changed between any two agent versions:
+
+```bash
+# Compare two tagged releases
+git diff v1.0.0 v1.1.0
+
+# See what changed in SOUL.md between versions
+git diff v1.0.0 v1.1.0 -- SOUL.md
+
+# See all changed files between versions
+git diff --name-only v1.0.0 v1.1.0
+
+# Compare current working copy to last stable tag
+git diff v1.0.0 HEAD
+```
+
+Because all agent configuration is plain text, diffs are human-readable. A change to a compliance rule in `RULES.md` looks exactly like a change to any other markdown file — the person reviewing the diff doesn't need specialized tooling.
+
+## Traceability with git blame
+
+`git blame` traces every line of every agent file to who wrote it and when:
+
+```bash
+# See who wrote each line of the agent's SOUL.md
+git blame SOUL.md
+
+# See the history of a specific compliance rule
+git blame RULES.md
+
+# Blame a specific skill
+git blame skills/regulatory-analysis/SKILL.md
+```
+
+For regulated environments, this provides an audit trail at the file level: every constraint, every escalation trigger, every compliance setting has an author and a timestamp without any additional logging infrastructure.
+
+## Rolling back
+
+Two options for rollback depending on whether you want to preserve or discard history:
+
+**`git revert` — preserve history (recommended)**
+
+Creates a new commit that undoes the changes. The rollback itself is auditable:
+
+```bash
+# Revert a specific bad commit
+git revert <bad-commit-hash>
+
+# Revert the last commit
+git revert HEAD
+```
+
+**`git checkout` — restore a specific version**
+
+Restores files to their state at a tag or commit without creating a new commit:
+
+```bash
+# Restore the agent to the state at v1.0.0
+git checkout v1.0.0 -- agent.yaml SOUL.md RULES.md skills/
+
+# Then commit the restoration
+git commit -m "revert: restore to v1.0.0 after regression in v1.1.0"
+```
+
+<Warning>
+  For regulated agents with immutable audit requirements, prefer `git revert` over hard resets. `git revert` preserves the full history — including the bad version and the rollback — which is what compliance audit trails require.
+</Warning>
+
+## Branch-based promotion workflow
+
+Promote agent changes through environments using branches:
+
+```
+dev → staging → main
+```
+
+```bash
+# Develop on a feature branch
+git checkout -b feature/new-skill
+# ... make changes ...
+git commit -m "feat: add regulatory-analysis skill"
+
+# Merge to dev for integration testing
+git checkout dev && git merge feature/new-skill
+
+# Run the agent on the dev branch to test
+gitagent run -r https://github.com/org/my-agent -b dev -p "Test new skill"
+
+# Promote to staging
+git checkout staging && git merge dev
+
+# Tag a release candidate
+git tag v1.1.0-rc1
+
+# Promote to main after validation
+git checkout main && git merge staging
+git tag v1.1.0
+git push origin main --tags
+```
+
+## Version field in agent.yaml
+
+The `version` field in `agent.yaml` follows semantic versioning:
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.1.0          # ← bump this with each release
+description: Financial compliance analysis agent
+```
+
+Run `gitagent info` to see the current version alongside the rest of the agent summary. The version is included in audit logs when `compliance.recordkeeping.log_contents` includes `model_version`.
+
+<CardGroup cols={2}>
+  <Card title="Branch-based deployment" href="/patterns/branching">
+    Promote agent versions through dev → staging → main using git branches.
+  </Card>
+  <Card title="CI/CD for agents" href="/patterns/cicd">
+    Validate every version automatically on push before it can be deployed.
+  </Card>
+</CardGroup>

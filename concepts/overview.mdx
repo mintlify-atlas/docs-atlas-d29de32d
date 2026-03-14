@@ -1,0 +1,78 @@
+---
+title: "How GitAgent works"
+description: "The core principle: a git repository is the agent definition. Files are behavior."
+---
+
+GitAgent defines a portable, version-controlled format for AI agents. The fundamental idea is simple: **a git repository is the agent**. Every file in the repo is part of the agent definition — identity, rules, capabilities, compliance, memory. Clone the repo, get the agent.
+
+This means every tool git gives you — commits, branches, diffs, tags, PRs, blame — works directly on your agent. There's no separate configuration server, no proprietary format to export to, no vendor lock-in.
+
+## The four core principles
+
+<CardGroup cols={2}>
+  <Card title="Git-native" icon="code-branch">
+    Every change to an agent is a git commit. Roll back a broken prompt, branch for experiments, tag stable releases, and diff between versions — full undo history for your agent built into the tool you already use.
+  </Card>
+  <Card title="Framework-agnostic" icon="shuffle">
+    Define your agent once using the gitagent standard, then export to any framework: Claude Code, OpenAI, CrewAI, OpenClaw, Nanobot, Lyzr, or GitHub Models. Write once, run anywhere.
+  </Card>
+  <Card title="Compliance-ready" icon="shield-check">
+    First-class support for FINRA Rules 3110/4511/2210, Federal Reserve SR 11-7/SR 23-4, SEC Reg S-P, and CFPB Circular 2022-03. Segregation of duties, audit logging, and human-in-the-loop are manifest fields, not afterthoughts.
+  </Card>
+  <Card title="Composable" icon="puzzle-piece">
+    Agents can extend a parent agent with `extends:`, depend on external agents with `dependencies:`, and delegate to sub-agents in the `agents/` directory. Build complex multi-agent systems from reusable, versioned pieces.
+  </Card>
+</CardGroup>
+
+## The mental model: files are behavior
+
+Each file in a gitagent repository describes a specific dimension of agent behavior:
+
+| File / directory | What it controls |
+|-----------------|------------------|
+| `agent.yaml` | Identity, model, capabilities, compliance — the manifest |
+| `SOUL.md` | Personality, tone, values, domain expertise |
+| `RULES.md` | Hard constraints — what the agent must always or never do |
+| `DUTIES.md` | Segregation of duties policy and role boundaries |
+| `skills/` | Reusable capability modules the agent can activate |
+| `tools/` | MCP-compatible tool definitions |
+| `knowledge/` | Reference documents the agent consults at runtime |
+| `memory/` | Persistent cross-session state |
+| `workflows/` | Multi-step procedures and playbooks |
+| `hooks/` | Lifecycle event handlers (bootstrap, teardown, audit) |
+| `agents/` | Sub-agent definitions (recursive structure) |
+| `compliance/` | Regulatory artifacts for audits and validation |
+
+Only two files are required to define a valid agent: **`agent.yaml`** and **`SOUL.md`**. Everything else is optional — add what you need, skip what you don't.
+
+## How it fits together
+
+<Steps>
+  <Step title="Define the agent">
+    Create `agent.yaml` and `SOUL.md`. These two files are the minimum. `agent.yaml` declares the manifest — name, version, model preferences, skills, tools, and compliance configuration. `SOUL.md` defines who the agent is: its personality, values, and communication style.
+  </Step>
+  <Step title="Add capabilities">
+    Drop skills into `skills/`, tool schemas into `tools/`, and reference documents into `knowledge/`. Reference skills and tools by name in `agent.yaml` to activate them. Each skill is an independent module with its own instructions and allowed tools.
+  </Step>
+  <Step title="Validate">
+    Run `gitagent validate` to check the manifest schema, verify all referenced skills and tools exist, and (with `--compliance`) validate against regulatory requirements. Validation can run in CI on every push.
+  </Step>
+  <Step title="Run or export">
+    Use `gitagent run` to launch the agent directly with a supported adapter (Claude Code, OpenAI, Lyzr, GitHub Models, and more). Or use `gitagent export` to generate a format-specific artifact — a system prompt, a Python file, a YAML config — for any downstream framework.
+  </Step>
+</Steps>
+
+## Why git?
+
+Git solves problems for agents that every other approach has to reinvent from scratch:
+
+- **Versioning** — every `git commit` is a snapshot of your agent. Roll back a bad prompt with `git revert`.
+- **Branching** — experiment with new skills or personalities on a branch without affecting production.
+- **Diffing** — `git diff` shows exactly what changed between agent versions, line by line.
+- **Collaboration** — pull requests, code review, and branch protection work on agent definitions the same way they work on code.
+- **Releases** — `git tag v1.2.0` pins a stable agent version. Production can track a tag; staging can track `main`.
+- **Audit trail** — `git blame` traces every line of every file to who changed it and when — out of the box.
+
+<Note>
+  The gitagent specification is versioned at `spec_version` in `agent.yaml`. The current version is `0.1.0`. The full specification is at [`spec/SPECIFICATION.md`](https://github.com/open-gitagent/gitagent/blob/main/spec/SPECIFICATION.md).
+</Note>

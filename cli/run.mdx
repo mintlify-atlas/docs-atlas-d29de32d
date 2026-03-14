@@ -1,0 +1,206 @@
+---
+title: 'gitagent run'
+description: 'Run an agent from a git repository or local directory using any supported adapter.'
+sidebarTitle: 'run'
+---
+
+## Synopsis
+
+```bash
+gitagent run [options]
+```
+
+Either `--repo` or `--dir` is required.
+
+## Description
+
+`gitagent run` loads an agent definition and executes it with the specified adapter. It can clone a git repository on demand, use git caching to avoid redundant clones, and supports nine adapters ranging from fully interactive (Claude Code) to API-based one-shot calls (Lyzr, GitHub Models).
+
+## Options
+
+<ParamField path="-r, --repo" type="string">
+  Git repository URL to clone and run. Mutually exclusive with `--dir`.
+</ParamField>
+
+<ParamField path="-d, --dir" type="string">
+  Local agent directory to run. Mutually exclusive with `--repo`.
+</ParamField>
+
+<ParamField path="-a, --adapter" type="string" default="claude">
+  Adapter to use. See the [Adapters](#adapters) table below.
+</ParamField>
+
+<ParamField path="-b, --branch" type="string" default="main">
+  Git branch or tag to clone when using `--repo`.
+</ParamField>
+
+<ParamField path="--refresh" type="boolean" default="false">
+  Force a re-clone of the repository, pulling the latest changes into the cache.
+</ParamField>
+
+<ParamField path="--no-cache" type="boolean" default="false">
+  Clone to a temporary directory and delete it on exit. Bypasses the persistent cache.
+</ParamField>
+
+<ParamField path="-p, --prompt" type="string">
+  Initial prompt to send to the agent. Required for some adapters (see table below).
+</ParamField>
+
+## Adapters
+
+| Adapter | Mode | `-p` required | Requirements |
+|---------|------|:---:|--------------|
+| `claude` | Interactive / one-shot | No | Claude Code CLI |
+| `openai` | One-shot | No | `OPENAI_API_KEY`, Python 3, `openai-agents` package |
+| `crewai` | One-shot | No | `crewai` CLI (`pip install crewai`) |
+| `openclaw` | One-shot | Yes | `ANTHROPIC_API_KEY`, OpenClaw CLI |
+| `nanobot` | Interactive / one-shot | No | `ANTHROPIC_API_KEY`, Nanobot CLI |
+| `lyzr` | One-shot | Yes | `LYZR_API_KEY` |
+| `github` | One-shot | Yes | `GITHUB_TOKEN` with `models:read` scope |
+| `git` | Auto-detect | No | Depends on detected adapter |
+| `prompt` | Print only | No | None |
+
+## Adapter details
+
+### claude
+
+Spawns the Claude Code CLI with the agent configuration mapped to Claude Code flags:
+
+- `--append-system-prompt` — layers agent identity on Claude Code defaults
+- `--model` / `--fallback-model` — from `model.preferred` / `model.fallback`
+- `--max-turns` — from `runtime.max_turns`
+- `--permission-mode plan` — when `supervision.human_in_the_loop` is `always`
+- `--allowedTools` — from skill and tool definitions
+- `--agents` — sub-agent configuration from `agents/`
+- `--add-dir` — knowledge and skills directories
+- `--settings` — hooks mapped to Claude Code hook format
+
+Runs interactively (stdio inherited). Provide `-p` to start with an initial message.
+
+**Requires:** [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed globally.
+
+### openai
+
+Exports the agent as OpenAI Agents SDK Python code, writes it to a temp file, and runs it with `python3`. Cleans up after execution.
+
+**Requires:** Python 3, `openai-agents` package, `OPENAI_API_KEY` set.
+
+### crewai
+
+Exports the agent as a CrewAI YAML configuration and runs `crewai kickoff --config <tmpfile>`.
+
+**Requires:** `crewai` CLI installed.
+
+### openclaw
+
+Creates a temporary workspace with `AGENTS.md`, `SOUL.md`, `TOOLS.md`, and skill files. Auto-provisions `ANTHROPIC_API_KEY` into `~/.openclaw/agents/main/agent/auth-profiles.json` if needed. Runs `openclaw agent --local --session-id <id> --message <prompt>`.
+
+**Requires:** OpenClaw CLI, `ANTHROPIC_API_KEY`, `-p` prompt.
+
+### nanobot
+
+Creates a temp config directory with `config.json` and `system-prompt.md`. Auto-provisions `ANTHROPIC_API_KEY` into `~/.nanobot/config.json` if needed. Runs `nanobot agent` (interactive) or `nanobot agent --message <prompt>` (one-shot).
+
+**Requires:** Nanobot CLI (`pip install nanobot-ai`), `ANTHROPIC_API_KEY`.
+
+### lyzr
+
+Exports the agent to the Lyzr API payload, creates the agent on Lyzr Studio (if no `.lyzr_agent_id` file exists), saves the agent ID, and sends the prompt to the inference API.
+
+**Requires:** `LYZR_API_KEY`, `-p` prompt. See [lyzr run](/cli/lyzr) for more control.
+
+### github
+
+Exports the system prompt, resolves the model name to a GitHub Models namespace, and sends a streaming chat completions request. Response tokens are streamed to stdout in real-time.
+
+**Requires:** `GITHUB_TOKEN` or `GH_TOKEN` with `models:read` scope, `-p` prompt.
+
+**Default model:** `openai/gpt-4.1` when no model is specified in `agent.yaml`.
+
+### git
+
+Clones the repository and auto-detects the best adapter from the agent contents, then delegates to that adapter.
+
+<Warning>
+  The `git` adapter requires `--repo`. It cannot be used with `--dir`.
+</Warning>
+
+**Auto-detection priority:**
+
+| Priority | Signal | Detected adapter |
+|----------|--------|-----------------|
+| 1 | `.gitagent_adapter` file content | Value in file (e.g. `lyzr`, `github`) |
+| 2 | Model name starts with `claude` | `claude` |
+| 3 | Model name starts with `gpt`, `o1`, `o3` | `openai` |
+| 4 | `CLAUDE.md` or `.claude/` exists | `claude` |
+| 5 | `.cursorrules` exists | `openai` |
+| 6 | `crew.yaml` or `crewai.yaml` exists | `crewai` |
+| 7 | `.lyzr_agent_id` exists | `lyzr` |
+| 8 | `.github_models` exists | `github` |
+| 9 | *(fallback)* | `claude` |
+
+### prompt
+
+Prints the compiled system prompt to stdout without running any framework. Useful for inspecting what will be sent to an LLM or for piping into another tool.
+
+## Git caching
+
+When using `--repo`, gitagent caches cloned repositories to avoid repeated network operations:
+
+- **Cache location:** `~/.gitagent/cache/<hash>/`
+- **Hash:** SHA-256 of `{url}#{branch}`, first 16 characters
+
+| Flag | Behavior |
+|------|---------|
+| *(default)* | Clone once, reuse on subsequent runs |
+| `--refresh` | Pull latest into the existing cache directory |
+| `--no-cache` | Clone to a temp directory, delete on exit |
+
+## Examples
+
+<CodeGroup>
+
+```bash Run local agent interactively with Claude Code
+gitagent run -d ./my-agent
+```
+
+```bash Clone from git and run
+gitagent run -r https://github.com/user/agent
+```
+
+```bash Run with a specific branch
+gitagent run -r https://github.com/user/agent -b develop --refresh
+```
+
+```bash Run with GitHub Models (one-shot)
+gitagent run -d ./my-agent -a github -p "Review my authentication code"
+```
+
+```bash Run with Lyzr (one-shot)
+gitagent run -r https://github.com/user/agent -a lyzr -p "Hello"
+```
+
+```bash Auto-detect adapter from repo contents
+gitagent run -a git -r https://github.com/user/my-agent -p "Hello"
+```
+
+```bash One-shot prompt with local agent
+gitagent run -d ./my-agent -p "Summarize this codebase"
+```
+
+```bash Print the compiled system prompt only
+gitagent run -d ./my-agent -a prompt
+```
+
+```bash Run without caching (temp clone)
+gitagent run -r https://github.com/user/agent --no-cache -p "Quick check"
+```
+
+</CodeGroup>
+
+## Related commands
+
+- [export](/cli/export) — Export the agent to a specific framework format without running it
+- [lyzr run](/cli/lyzr) — Full Lyzr one-liner with create + chat
+- [validate](/cli/validate) — Validate the agent before running
+- [skills install](/cli/skills) — Install skills referenced in the agent manifest

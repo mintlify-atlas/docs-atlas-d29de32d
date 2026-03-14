@@ -1,80 +1,304 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Create, validate, and run your first gitagent in under five minutes."
+keywords: ["gitagent", "quickstart", "getting started", "AI agent", "git-native"]
 ---
 
-## Get started in three steps
+This guide walks you through installing gitagent, scaffolding a new agent, validating it, and running it locally with Claude Code.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+- Node.js 18 or later
+- npm 7 or later
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+For the `run` step you will also need the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed globally.
 
-### Step 2: Deploy your changes
+---
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Step title="Install gitagent">
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Install the CLI globally from npm:
 
-### Step 3: Go live
+```bash
+npm install -g gitagent
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+Verify the installation:
+
+```bash
+gitagent --version
+```
+
+You should see output like `0.1.7`. If not, see the [Installation](/installation) page for troubleshooting.
+
+</Step>
+
+<Step title="Scaffold a new agent">
+
+Create a new agent directory with the `standard` template. This gives you a solid starting point with an identity, rules, a skills directory, and a knowledge index — all ready to customize.
+
+<CodeGroup>
+
+```bash minimal
+gitagent init --template minimal
+```
+
+```bash standard (recommended)
+gitagent init --template standard
+```
+
+```bash full (with compliance)
+gitagent init --template full --dir ./my-agent
+```
+
+</CodeGroup>
+
+The three templates differ in what they create:
+
+| Template | Files created |
+|----------|---------------|
+| `minimal` | `agent.yaml`, `SOUL.md` |
+| `standard` | `agent.yaml`, `SOUL.md`, `RULES.md`, `AGENTS.md`, `skills/`, `knowledge/`, `tools/` |
+| `full` | Everything in `standard` plus `memory/`, `hooks/`, `examples/`, `agents/`, `compliance/`, `config/`, `.gitignore` |
+
+After running `gitagent init --template standard` you will see:
+
+```
+✔ Created agent.yaml
+✔ Created SOUL.md
+✔ Created RULES.md
+✔ Created AGENTS.md
+✔ Created skills/example-skill/SKILL.md
+✔ Created knowledge/index.yaml
+
+Agent scaffolded at /your/directory
+Next steps:
+  1. Edit agent.yaml with your agent details
+  2. Write your SOUL.md identity
+  3. Run `gitagent validate` to check your configuration
+```
+
+<Tip>
+  Only two files are strictly required: `agent.yaml` (the manifest) and `SOUL.md` (the identity). Everything else is optional — add what you need, leave the rest.
+</Tip>
+
+</Step>
+
+<Step title="Edit the core files">
+
+Open `agent.yaml` and fill in your agent's identity. The minimal required fields are `spec_version`, `name`, `version`, and `description`:
+
+```yaml agent.yaml
+spec_version: "0.1.0"
+name: my-agent
+version: 0.1.0
+description: A helpful assistant agent
+author: ""
+license: MIT
+model:
+  preferred: claude-sonnet-4-5-20250929
+  constraints:
+    temperature: 0.3
+    max_tokens: 4096
+skills: []
+tools: []
+runtime:
+  max_turns: 30
+  timeout: 120
+tags: []
+```
+
+Then open `SOUL.md` and write your agent's identity and values:
+
+```markdown SOUL.md
+# Soul
+
+## Core Identity
+I am a helpful assistant specializing in [your domain].
+
+## Communication Style
+Clear, concise, and professional. I adapt my tone to the context.
+
+## Values & Principles
+- Accuracy over speed
+- Transparency in reasoning
+- Helpfulness without overstepping
+```
+
+</Step>
+
+<Step title="Validate the agent">
+
+Run the validator to check your configuration against the gitagent specification:
+
+```bash
+gitagent validate
+```
+
+The validator checks:
+
+- **`agent.yaml`** — JSON schema validation; referenced skills, tools, and sub-agents all exist
+- **`SOUL.md`** — Exists, is not empty, has substantive content
+- **`skills/`** — Valid SKILL.md frontmatter, name matches directory, description length, instruction size
+- **`hooks/hooks.yaml`** — Valid YAML schema, referenced scripts exist
+- **`tools/*.yaml`** — Valid tool schema
+
+To also check regulatory compliance rules:
+
+```bash
+gitagent validate --compliance
+```
+
+A passing result looks like:
+
+```
+Validating gitagent
+Directory: /your/directory
+────────────────────────────────────────
+✔ agent.yaml — valid
+✔ SOUL.md — valid
+✔ skills/ — valid
+────────────────────────────────────────
+✔ Validation passed (0 warnings)
+```
+
+<Note>
+  When you run `gitagent init`, the scaffolded files pass validation immediately. Edit them to add your own content, then validate again.
+</Note>
+
+</Step>
+
+<Step title="Inspect the agent">
+
+View a formatted summary of your agent configuration:
+
+```bash
+gitagent info
+```
+
+This shows the agent name, version, description, model preferences, skills, tools, sub-agents, runtime config, compliance settings, and a preview of `SOUL.md`.
+
+To inspect an agent in a specific directory:
+
+```bash
+gitagent info -d ./examples/standard
+```
+
+</Step>
+
+<Step title="Export to a system prompt">
+
+Export your agent definition to a portable system prompt you can use with any LLM:
+
+```bash
+gitagent export --format system-prompt
+```
+
+To save the output to a file instead of printing it:
+
+```bash
+gitagent export --format system-prompt --output system-prompt.md
+```
+
+Other useful export targets:
+
+<CodeGroup>
+
+```bash Claude Code
+gitagent export --format claude-code --output CLAUDE.md
+```
+
+```bash OpenAI Python SDK
+gitagent export --format openai --output agent.py
+```
+
+```bash CrewAI YAML
+gitagent export --format crewai --output crew.yaml
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Run the agent">
+
+Run your agent locally with the Claude Code adapter (the default):
+
+```bash
+gitagent run -d .
+```
+
+This generates a system prompt from your agent definition and launches Claude Code with the appropriate flags — model preferences, tool permissions, runtime settings, and hook mappings — all derived from your `agent.yaml`.
+
+To run a one-shot prompt without interactive mode:
+
+```bash
+gitagent run -d . -p "Summarize this project"
+```
+
+To run an agent directly from a public git repository:
+
+```bash
+gitagent run -r https://github.com/user/my-agent -p "Hello"
+```
+
+To run with a different adapter:
+
+```bash
+# GitHub Models (requires GITHUB_TOKEN)
+gitagent run -d . -a github -p "Review my code"
+
+# Lyzr Studio (requires LYZR_API_KEY)
+gitagent run -d . -a lyzr -p "Hello"
+```
+
+<Warning>
+  The `claude` adapter (default) requires the Claude Code CLI to be installed. Run `claude --version` to verify. Other adapters have their own requirements — see [Adapters](/adapters/overview) for details.
+</Warning>
+
+</Step>
+
+</Steps>
+
+---
+
+## What you just built
+
+Your agent directory is now a **git-native agent definition**: version-controllable, portable across frameworks, and ready for CI/CD with `gitagent validate` on every push.
+
+The `standard` template gives you:
+
+```
+my-agent/
+├── agent.yaml                  # Manifest — identity, model, skills, runtime
+├── SOUL.md                     # Identity, personality, values
+├── RULES.md                    # Hard constraints and safety boundaries
+├── AGENTS.md                   # Fallback instructions for any framework
+├── skills/
+│   └── example-skill/
+│       └── SKILL.md            # Reusable capability module
+├── tools/                      # MCP-compatible tool definitions
+└── knowledge/
+    └── index.yaml              # Reference documents index
+```
+
+---
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Explore every command, flag, and option in the gitagent CLI.
+  </Card>
+  <Card title="Adapters" icon="plug" href="/adapters/overview">
+    Export and run your agent with Claude Code, OpenAI, CrewAI, Lyzr, and more.
+  </Card>
+  <Card title="Compliance" icon="shield-check" href="/compliance/overview">
+    Add FINRA, Federal Reserve, and SEC compliance configuration to your agent.
+  </Card>
+  <Card title="Examples" icon="folder-open" href="/examples/standard">
+    Browse the standard code review agent and the full compliance agent examples.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,215 @@
+---
+title: 'Workflows schema'
+description: 'Multi-step procedure definitions in workflows/*.yaml or *.md. Complete field reference for structured workflow YAML.'
+---
+
+Workflows define multi-step procedures the agent can execute. They are stored in the `workflows/` directory as either structured YAML files or narrative Markdown files.
+
+## Directory structure
+
+```
+workflows/
+├── regulatory-review.yaml    # Structured workflow
+└── onboarding.md             # Narrative workflow
+```
+
+## Structured format (YAML)
+
+YAML workflows define discrete steps with inputs, outputs, dependencies, and compliance controls.
+
+```yaml
+name: regulatory-review
+description: Complete regulatory review workflow
+version: 1.0.0
+inputs:
+  - name: document
+    type: file
+    required: true
+  - name: framework
+    type: string
+    default: finra
+outputs:
+  - name: report
+    type: string
+    description: Compliance review report
+steps:
+  - id: classify
+    action: Classify document type and applicable regulations
+    skill: regulatory-analysis
+    outputs: [doc_type, applicable_rules]
+  - id: analyze
+    action: Analyze document against applicable rules
+    depends_on: [classify]
+    skill: regulatory-analysis
+    inputs:
+      rules: ${{ steps.classify.outputs.applicable_rules }}
+  - id: report
+    action: Generate compliance report
+    depends_on: [analyze]
+    skill: report-generation
+    conditions:
+      - ${{ steps.analyze.outputs.findings_count > 0 }}
+error_handling:
+  on_step_failure: escalate
+  escalation_target: chief-compliance-officer
+```
+
+## Narrative format (Markdown)
+
+Markdown workflows are free-form procedure descriptions. They give the agent instructions for a multi-step process without the structured step graph. Use this format for procedures that are hard to express as a DAG.
+
+```markdown
+# New Vendor Onboarding
+
+When onboarding a new AI vendor:
+
+1. Request SOC 2 Type II report from the vendor
+2. Complete the due diligence questionnaire per SR 23-4
+3. Assess subcontractor and fourth-party risk
+4. Document findings in vendor_management section of agent.yaml
+5. Schedule annual re-assessment
+```
+
+## Required fields (YAML workflows)
+
+<ParamField path="name" type="string" required>
+  Workflow identifier.
+</ParamField>
+
+<ParamField path="steps" type="object[]" required>
+  The workflow steps. At least one step is required.
+
+  <ParamField path="steps[].id" type="string" required>
+    Unique step identifier within this workflow.
+  </ParamField>
+
+  <ParamField path="steps[].action" type="string" required>
+    What this step does. Natural language description or tool reference.
+  </ParamField>
+</ParamField>
+
+## Optional fields
+
+<ParamField path="description" type="string">
+  What this workflow does.
+</ParamField>
+
+<ParamField path="version" type="string">
+  Semantic version of the workflow definition.
+</ParamField>
+
+<ParamField path="inputs" type="object[]">
+  Workflow input parameters.
+
+  | Field | Type | Description |
+  |---|---|---|
+  | `name` | string | Input identifier |
+  | `type` | string | `string`, `number`, `boolean`, `file`, `object`, or `array` |
+  | `description` | string | What this input is |
+  | `required` | boolean | Whether input is required. Default: `true` |
+  | `default` | any | Default value |
+</ParamField>
+
+<ParamField path="outputs" type="object[]">
+  Workflow output declarations.
+
+  | Field | Type | Description |
+  |---|---|---|
+  | `name` | string | Output identifier |
+  | `type` | string | Output type |
+  | `description` | string | What this output contains |
+</ParamField>
+
+## Step fields
+
+<ParamField path="steps[].skill" type="string">
+  Skill to use for this step. References a skill name from `agent.yaml skills[]`.
+</ParamField>
+
+<ParamField path="steps[].tool" type="string">
+  Tool to invoke for this step. References a tool name from `agent.yaml tools[]`.
+</ParamField>
+
+<ParamField path="steps[].agent" type="string">
+  Sub-agent to delegate this step to. References a sub-agent name from `agent.yaml agents`.
+</ParamField>
+
+<ParamField path="steps[].inputs" type="object">
+  Input parameters for this step. Supports `${{ }}` expressions referencing previous step outputs:
+
+  ```yaml
+  inputs:
+    rules: ${{ steps.classify.outputs.applicable_rules }}
+  ```
+</ParamField>
+
+<ParamField path="steps[].outputs" type="string[]">
+  Named outputs produced by this step, available to subsequent steps via `${{ steps.<id>.outputs.<name> }}`.
+</ParamField>
+
+<ParamField path="steps[].depends_on" type="string[]">
+  Step IDs that must complete before this step executes.
+</ParamField>
+
+<ParamField path="steps[].conditions" type="string[]">
+  Conditions that must be true for this step to execute. Supports `${{ }}` expressions.
+
+  ```yaml
+  conditions:
+    - ${{ steps.analyze.outputs.findings_count > 0 }}
+  ```
+</ParamField>
+
+<ParamField path="steps[].retry" type="object">
+  Retry configuration.
+
+  | Field | Type | Description |
+  |---|---|---|
+  | `max_attempts` | integer | Maximum retry attempts. Minimum: 1 |
+  | `backoff` | string | `linear` or `exponential` |
+</ParamField>
+
+<ParamField path="steps[].compliance" type="object">
+  Compliance controls for this step.
+
+  | Field | Type | Description |
+  |---|---|---|
+  | `requires_approval` | boolean | Step requires human approval before execution |
+  | `audit_level` | string | `none`, `basic`, `detailed`, or `full` |
+</ParamField>
+
+## Error handling
+
+<ParamField path="error_handling" type="object">
+  How to handle step failures.
+
+  <ParamField path="error_handling.on_step_failure" type="string">
+    Default: `abort`. Options: `abort`, `skip`, `retry`, `escalate`.
+  </ParamField>
+
+  <ParamField path="error_handling.escalation_target" type="string">
+    Who to escalate to on failure (e.g., `chief-compliance-officer`).
+  </ParamField>
+</ParamField>
+
+## How workflows relate to hooks
+
+Workflows and hooks serve different purposes:
+
+| | Workflows | Hooks |
+|---|---|---|
+| **Purpose** | Define multi-step procedures with DAG ordering | React to lifecycle events |
+| **Trigger** | Invoked explicitly by the agent | Fired automatically by the runtime |
+| **Structure** | Steps with inputs/outputs/dependencies | Scripts with stdin/stdout protocol |
+| **Use case** | Regulatory review process, onboarding procedures | Audit logging, compliance checks, escalation |
+
+Hooks defined in `hooks/hooks.yaml` can fire during workflow execution (e.g., `pre_tool_use` fires before each tool step in a workflow).
+
+## JSON schema
+
+The workflow schema is at `spec/schemas/workflow.schema.json`, referenced at `https://gitagent.dev/schemas/workflow.schema.json`.
+
+- `required`: `["name", "steps"]`
+- `steps` must have at least 1 item
+- Each step requires `id` and `action`
+- `additionalProperties: false` on steps prevents unknown fields

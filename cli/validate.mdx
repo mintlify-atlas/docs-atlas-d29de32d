@@ -1,0 +1,144 @@
+---
+title: 'gitagent validate'
+description: 'Validate an agent repository against the specification and optionally check regulatory compliance.'
+sidebarTitle: 'validate'
+---
+
+## Synopsis
+
+```bash
+gitagent validate [options]
+```
+
+## Description
+
+`gitagent validate` runs a multi-layer validation pass over an agent directory. It checks the `agent.yaml` schema, required files, skill and tool definitions, and lifecycle hooks. With `--compliance` it additionally checks the compliance section of `agent.yaml` against supported regulatory frameworks.
+
+Exits `0` if all checks pass (warnings are allowed). Exits `1` if any errors are found.
+
+## Options
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory to validate.
+</ParamField>
+
+<ParamField path="-c, --compliance" type="boolean" default="false">
+  Include regulatory compliance validation of the `compliance` section in `agent.yaml`.
+</ParamField>
+
+## What gets validated
+
+### agent.yaml
+
+- JSON Schema validation against the `agent-yaml` specification
+- All skills listed in `skills:` have a corresponding `skills/<name>/` directory
+- Skills directories missing a `SKILL.md` produce a warning
+- All tools listed in `tools:` have a corresponding `tools/<name>.yaml` file
+- All sub-agents listed in `agents:` have a directory at `agents/<name>/` or a file at `agents/<name>.md`
+
+### SOUL.md
+
+- File exists
+- File is not empty
+- File contains at least one paragraph of real content (not just headings)
+
+### skills/
+
+For every `SKILL.md` found under `skills/`:
+
+- YAML frontmatter is valid against the `skill` schema
+- Skill `name` matches the directory name (warning if mismatched)
+- `name` does not exceed 64 characters
+- `name` contains no consecutive hyphens (`--`), leading hyphen, or trailing hyphen
+- `description` does not exceed 1024 characters
+- Instructions are under ~5000 tokens (20,000 characters) — warning if exceeded
+
+### hooks/hooks.yaml
+
+Validated only if the file exists:
+
+- Valid YAML
+- Schema-valid against the `hooks` specification
+- All `script` paths referenced in hook entries exist on disk at `hooks/<script>`
+
+### tools/\*.yaml
+
+For each `.yaml` file under `tools/`:
+
+- Valid YAML
+- Schema-valid against the `tool` specification (warnings, not errors, on violation)
+
+## With `--compliance`
+
+<Warning>
+  Compliance validation is additive — it only runs when `--compliance` is passed. Core validation always runs.
+</Warning>
+
+When the `compliance` section is present in `agent.yaml`, the following checks apply:
+
+| Check | Rule | Severity |
+|-------|------|----------|
+| `compliance.risk_tier` is set | Required when `compliance` section exists | Error |
+| `human_in_the_loop` is `always` or `conditional` for `high`/`critical` risk | FINRA 3110 | Error |
+| `audit_logging: true` for `high`/`critical` risk | FINRA 4511 | Error |
+| Validation cadence is `quarterly` or more frequent for `high`/`critical` risk | SR 11-7 | Warning |
+| `communications.fair_balanced: true` when `finra` framework declared | FINRA 2210 | Error |
+| `communications.no_misleading: true` when `finra` framework declared | FINRA 2210 | Error |
+| `supervision` section present | FINRA 3110 | Warning |
+| `recordkeeping` section present | FINRA 4511 | Warning |
+| `model_risk` section present when `federal_reserve` framework declared | SR 11-7 | Error |
+| `model_risk.ongoing_monitoring: true` when `federal_reserve` declared | SR 11-7 | Error |
+| `audit_logging` when `sec` framework declared | SEC 17a-4 | Warning |
+| `pii_handling` is not `allow` when `sec` declared | Reg S-P | Warning |
+| `data_governance.bias_testing: true` when `cfpb` declared | CFPB Circular 2022-03 | Warning |
+| `compliance/` directory, `risk-assessment.md`, `regulatory-map.yaml`, `validation-schedule.yaml` | high/critical tier | Warning |
+| `vendor_management` metadata on each dependency when `finra` or `federal_reserve` declared | SR 23-4 | Warning |
+
+If no `compliance` section is present in `agent.yaml`, a warning is emitted and the compliance checks are skipped.
+
+### Segregation of Duties
+
+If `compliance.segregation_of_duties` is configured, additional checks run:
+
+- At least 2 roles defined
+- Role IDs are unique
+- Conflict pairs reference only defined roles
+- A role does not conflict with itself
+- No agent is assigned conflicting roles (error for `strict` enforcement, warning for `advisory`)
+- Handoffs require at least 2 distinct roles
+- Unassigned roles produce a warning
+
+## Examples
+
+<CodeGroup>
+
+```bash Basic validation
+gitagent validate
+```
+
+```bash Validate a specific directory
+gitagent validate -d ./examples/standard
+```
+
+```bash Validate with compliance checks
+gitagent validate --compliance
+```
+
+```bash Full compliance validation on a production agent
+gitagent validate -d ./examples/full --compliance
+```
+
+</CodeGroup>
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | All validations passed (warnings are non-fatal) |
+| `1` | One or more errors found |
+
+## Related commands
+
+- [init](/cli/init) — Scaffold a new agent repository
+- [audit](/cli/audit) — Generate a detailed compliance audit report
+- [info](/cli/info) — Display a summary of the current agent configuration

@@ -1,0 +1,178 @@
+---
+title: "Branch-based deployment"
+description: "Use git branches to promote agent changes through dev → staging → main, just like shipping software."
+---
+
+Agent changes should flow through environments before reaching production. The branch-based deployment pattern uses git branches — `dev`, `staging`, `main` — to control which version of an agent is running where. gitagent's `--branch` flag makes it straightforward to run any branch or tag against any adapter.
+
+## The promotion model
+
+```
+feature/* → dev → staging → main
+```
+
+- **`dev`** — Integration testing. New skills, prompt changes, and configuration updates land here first.
+- **`staging`** — Pre-production validation. Passes automated checks. Used for human review and load testing.
+- **`main`** — Production. Only receives changes that have passed staging.
+
+Each branch represents an environment. Merging a branch promotes the agent.
+
+## Running an agent from a specific branch
+
+Use `--branch` (or `-b`) with `gitagent run` to target a branch:
+
+```bash
+# Run the development branch
+gitagent run -r https://github.com/org/my-agent -b develop
+
+# Run the staging branch
+gitagent run -r https://github.com/org/my-agent -b staging
+
+# Run the production branch
+gitagent run -r https://github.com/org/my-agent -b main
+
+# Run a specific feature branch for testing
+gitagent run -r https://github.com/org/my-agent -b feature/new-compliance-skill -p "Test prompt"
+```
+
+## The --refresh flag
+
+By default, gitagent caches cloned repositories at `~/.gitagent/cache/` to avoid re-cloning on every run. Use `--refresh` to pull the latest state of a branch:
+
+```bash
+# Pull latest and run (useful in CI or when testing active development)
+gitagent run -r https://github.com/org/my-agent -b develop --refresh
+
+# Force fresh clone to a temp directory (no cache, deleted on exit)
+gitagent run -r https://github.com/org/my-agent --no-cache
+```
+
+| Flag | Behavior |
+|------|----------|
+| *(default)* | Clone once, reuse from `~/.gitagent/cache/` |
+| `--refresh` | Pull latest into the existing cache entry |
+| `--no-cache` | Clone to a temp directory, delete on exit |
+
+## Tagged releases and canary deployments
+
+Tag stable versions to create immutable deployment targets:
+
+```bash
+# Tag the current main branch as v1.0.0
+git tag v1.0.0
+git push origin v1.0.0
+
+# Pin production to the tag
+gitagent run -r https://github.com/org/my-agent -b v1.0.0
+
+# Test v1.1.0 on staging while production stays on v1.0.0
+gitagent run -r https://github.com/org/my-agent -b v1.1.0
+```
+
+This is the canary deployment pattern: production stays pinned to a known-good tag while staging tests the next version. Roll back by simply pointing production at the previous tag.
+
+<Tip>
+  Pinning production to a tag (e.g., `v1.0.0`) rather than a branch (e.g., `main`) means production is stable even if `main` moves forward. You control when production advances by updating the tag you reference.
+</Tip>
+
+## Full promotion workflow
+
+<Steps>
+  <Step title="Develop on a feature branch">
+    ```bash
+    git checkout -b feature/add-regulatory-skill
+    # ... make changes to skills/, agent.yaml, etc. ...
+    git commit -m "feat: add regulatory-analysis skill"
+    git push origin feature/add-regulatory-skill
+    ```
+  </Step>
+  <Step title="Test on dev">
+    ```bash
+    # Merge feature to dev
+    git checkout dev && git merge feature/add-regulatory-skill
+    git push origin dev
+
+    # Run the dev agent to validate behavior
+    gitagent run -r https://github.com/org/my-agent -b dev --refresh -p "Test new skill"
+    ```
+  </Step>
+  <Step title="Validate and promote to staging">
+    ```bash
+    # Validate before promoting
+    gitagent validate -d . --compliance
+
+    # Promote to staging
+    git checkout staging && git merge dev
+    git push origin staging
+
+    # Tag as a release candidate
+    git tag v1.1.0-rc1
+    git push origin v1.1.0-rc1
+    ```
+  </Step>
+  <Step title="Tag and release to production">
+    ```bash
+    # After staging validation passes
+    git checkout main && git merge staging
+    git tag v1.1.0
+    git push origin main --tags
+
+    # Production now runs v1.1.0
+    gitagent run -r https://github.com/org/my-agent -b v1.1.0
+    ```
+  </Step>
+</Steps>
+
+## Rolling back production
+
+If the new version causes issues, point production back at the previous tag:
+
+```bash
+# Roll back to v1.0.0 immediately
+gitagent run -r https://github.com/org/my-agent -b v1.0.0
+
+# Or revert the main branch
+git checkout main
+git revert HEAD  # creates a revert commit, preserving history
+git push origin main
+git tag v1.1.1   # tag the rollback as a patch release
+```
+
+<Warning>
+  For regulated agents with immutable audit requirements, use `git revert` rather than `git reset --hard`. Revert preserves the full history of what was deployed and when, which is required for compliance audit trails.
+</Warning>
+
+## Example: environment-specific configuration
+
+Use the `config/` directory for environment-specific overrides that travel with each branch:
+
+```
+config/
+├── default.yaml      # Base configuration
+└── production.yaml   # Production overrides
+```
+
+```yaml
+# config/default.yaml
+log_level: info
+model_override: null
+compliance_mode: true
+```
+
+```yaml
+# config/production.yaml
+log_level: warn
+compliance_mode: true
+audit_logging: true
+```
+
+Configurations are deep-merged: `default.yaml` is the base, and `production.yaml` overrides specific fields for production runs.
+
+<CardGroup cols={2}>
+  <Card title="Agent versioning" href="/patterns/agent-versioning">
+    Every branch and tag is a versioned agent state — full history, diffs, and rollback.
+  </Card>
+  <Card title="CI/CD for agents" href="/patterns/cicd">
+    Run `gitagent validate --compliance` automatically on every branch push.
+  </Card>
+</CardGroup>

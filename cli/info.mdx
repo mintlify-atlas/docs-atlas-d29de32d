@@ -1,0 +1,61 @@
+---
+title: 'gitagent info'
+description: 'Display a formatted summary of an agent configuration.'
+sidebarTitle: 'info'
+---
+
+## Synopsis
+
+```bash
+gitagent info [options]
+```
+
+## Description
+
+`gitagent info` reads `agent.yaml` (and supporting files) from the target directory and prints a human-readable summary of the agent's configuration. Useful for quickly inspecting an agent before running or exporting it.
+
+## Options
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory to inspect.
+</ParamField>
+
+## Output
+
+The command displays the following sections (fields are omitted if not set in `agent.yaml`):
+
+| Section | Details shown |
+|---------|---------------|
+| Identity | `name`, `version`, `description`, `author`, `license` |
+| Model preferences | `model.preferred`, `model.fallback`, `model.constraints` |
+| Skills | List of declared skill names |
+| Tools | List of declared tool names |
+| Sub-agents | Names and descriptions from `agents:` |
+| Runtime config | `max_turns`, `timeout`, `temperature` |
+| Compliance settings | `risk_tier`, frameworks, `human_in_the_loop` |
+| Tags | All tags from `tags:` |
+| SOUL.md preview | First ~10 lines of the SOUL.md file |
+
+## Examples
+
+<CodeGroup>
+
+```bash Inspect the agent in the current directory
+gitagent info
+```
+
+```bash Inspect a specific agent
+gitagent info -d ./examples/standard
+```
+
+```bash Inspect a full compliance agent
+gitagent info -d ./examples/full
+```
+
+</CodeGroup>
+
+## Related commands
+
+- [validate](/cli/validate) — Validate the agent against the specification
+- [audit](/cli/audit) — Generate a detailed compliance audit report
+- [export](/cli/export) — Export the agent to another framework format

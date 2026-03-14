@@ -1,0 +1,183 @@
+---
+title: "Human-in-the-loop"
+description: "Keep humans in control of agent learning, skill creation, and critical decisions through branch-based review workflows."
+---
+
+When an agent learns a new skill or writes to memory, it shouldn't apply those changes silently. The human-in-the-loop pattern gives humans a review gate — every agent mutation opens a branch and a pull request before it merges.
+
+This maps directly onto git's native collaboration model: branches for isolation, pull requests for review, merge for approval.
+
+## How it works
+
+<Steps>
+  <Step title="Agent proposes a change">
+    The agent identifies a new skill, updates its memory, or modifies its behavior. Rather than writing the change directly, it commits to a feature branch.
+  </Step>
+  <Step title="Branch + PR opened automatically">
+    The agent opens a pull request against `main`. The PR contains the proposed skill, memory update, or configuration change as readable diffs.
+  </Step>
+  <Step title="Human reviews the diff">
+    A designated supervisor reviews the PR using standard git tooling — `git diff`, GitHub's PR interface, or any review tool. Every field, every line, is visible.
+  </Step>
+  <Step title="Approve or reject">
+    The supervisor approves and merges, or requests changes. The agent cannot proceed with the change until the PR is merged.
+  </Step>
+</Steps>
+
+## Enabling human-in-the-loop supervision
+
+Set `human_in_the_loop: always` in the `compliance.supervision` block of `agent.yaml`:
+
+```yaml
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+  supervision:
+    designated_supervisor: chief-compliance-officer
+    review_cadence: monthly
+    human_in_the_loop: always
+    override_capability: true
+    kill_switch: true
+```
+
+The four valid values for `human_in_the_loop` are:
+
+| Value | Behavior |
+|-------|----------|
+| `always` | Every agent action requires human approval before execution |
+| `conditional` | Escalate only when escalation triggers fire |
+| `advisory` | Humans are notified but not required to approve |
+| `none` | Fully autonomous — no human gate |
+
+<Note>
+  For `high` and `critical` risk tiers, `gitagent validate --compliance` enforces that `human_in_the_loop` is set to `always` or `conditional`. Leaving it as `none` will fail the compliance check.
+</Note>
+
+## Claude Code integration
+
+When running the agent with the `claude` adapter, `human_in_the_loop: always` maps to the `--permission-mode plan` flag on the Claude Code CLI:
+
+```bash
+# gitagent run automatically passes --permission-mode plan
+# when human_in_the_loop is set to always
+gitagent run -d ./my-agent
+```
+
+In `plan` mode, Claude Code presents its proposed actions as a plan for human review before executing any tool calls. The agent cannot write files, run commands, or call external tools until the human approves the plan.
+
+## Escalation triggers
+
+For `conditional` supervision, define which conditions escalate to human review using `escalation_triggers`:
+
+```yaml
+compliance:
+  supervision:
+    human_in_the_loop: conditional
+    escalation_triggers:
+      - confidence_below: 0.85
+      - action_type: regulatory_filing
+      - action_type: customer_communication
+      - action_type: credit_decision
+      - error_detected: true
+```
+
+Supported trigger types:
+
+| Trigger | Example | Description |
+|---------|---------|-------------|
+| `confidence_below` | `confidence_below: 0.85` | Escalate when model confidence falls below threshold |
+| `action_type` | `action_type: customer_communication` | Escalate for specific action categories |
+| `error_detected` | `error_detected: true` | Escalate on any error |
+| `pii_detected` | `condition: pii_detected` | Halt and escalate when PII is found |
+| `data_classification_above` | For data classification level triggers | Escalate above a data sensitivity threshold |
+| `token_count_above` | For response length triggers | Escalate on unusually long outputs |
+
+## Kill switch
+
+The `kill_switch: true` field enables immediate halt capability — an authorized human can stop the agent mid-session without waiting for the current task to complete:
+
+```yaml
+compliance:
+  supervision:
+    human_in_the_loop: always
+    override_capability: true
+    kill_switch: true
+```
+
+- `override_capability: true` — humans can override any agent decision
+- `kill_switch: true` — immediate halt capability is provisioned
+
+<Warning>
+  For `critical` risk tier agents, the kill switch is a hard requirement. `gitagent validate --compliance` will fail if `kill_switch` is not `true` on critical-tier agents.
+</Warning>
+
+## Full example: compliance agent with supervision
+
+The `examples/full/` agent uses the full supervision configuration:
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.0.0
+description: Financial compliance analysis agent for FINRA and Federal Reserve regulated environments
+
+model:
+  preferred: claude-opus-4-6
+  fallback:
+    - claude-sonnet-4-5-20250929
+  constraints:
+    temperature: 0.1
+    max_tokens: 8192
+
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+  supervision:
+    designated_supervisor: chief-compliance-officer
+    review_cadence: monthly
+    human_in_the_loop: always
+    escalation_triggers:
+      - confidence_below: 0.85
+      - action_type: regulatory_filing
+      - action_type: customer_communication
+      - action_type: credit_decision
+      - error_detected: true
+    override_capability: true
+    kill_switch: true
+```
+
+## Hooks for supervision events
+
+Pair human-in-the-loop supervision with lifecycle hooks to log escalation events and notify supervisors:
+
+```yaml
+hooks:
+  on_error:
+    - script: scripts/escalate-error.sh
+      description: Escalate errors to designated supervisor per FINRA 3110
+      timeout: 10
+      compliance: true
+      fail_open: true
+  pre_response:
+    - script: scripts/check-communications-compliance.sh
+      description: Verify response meets FINRA 2210 fair/balanced standards
+      timeout: 15
+      compliance: true
+      fail_open: false
+```
+
+<CardGroup cols={2}>
+  <Card title="Agent versioning" href="/patterns/agent-versioning">
+    Every approved merge is a versioned commit — full history of what humans approved and when.
+  </Card>
+  <Card title="CI/CD for agents" href="/patterns/cicd">
+    Run `gitagent validate --compliance` on every PR to catch supervision misconfigurations before merge.
+  </Card>
+</CardGroup>

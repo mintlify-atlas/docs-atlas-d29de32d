@@ -1,0 +1,175 @@
+---
+title: "SEC & CFPB compliance"
+description: "How GitAgent maps to SEC Reg S-P (customer privacy), 17a-4 (records), and CFPB Circular 2022-03 (fair lending)."
+---
+
+GitAgent supports SEC and CFPB regulatory requirements through the `data_governance` and `recordkeeping` sections of `agent.yaml`. Declare `sec` and/or `cfpb` in your `frameworks` array to enable framework-specific validation.
+
+```yaml
+compliance:
+  risk_tier: high
+  frameworks:
+    - sec
+    - cfpb
+```
+
+## SEC Regulation S-P — Customer Privacy
+
+<Accordion title="What Reg S-P requires">
+SEC Regulation S-P (Privacy of Consumer Financial Information) requires broker-dealers and investment advisers to protect the privacy of customer financial information. For AI agents this means: PII must be handled with a defined policy (redact, encrypt, or prohibit), data must be classified, cross-border data transfers must be assessed, and customer consent requirements must be configured.
+</Accordion>
+
+Reg S-P maps to the `compliance.data_governance` section:
+
+```yaml
+compliance:
+  data_governance:
+    pii_handling: redact             # redact | encrypt | prohibit | allow
+    data_classification: restricted  # public | internal | confidential | restricted
+    consent_required: true           # Requires user consent for data use
+    cross_border: false              # Whether data crosses jurisdictions
+    bias_testing: true               # Regular bias testing required
+    lda_search: true                 # Less Discriminatory Alternative search (CFPB)
+```
+
+### pii_handling options
+
+| Value | Behavior |
+|-------|----------|
+| `redact` | PII is removed or masked in logs, outputs, and intermediate reasoning |
+| `encrypt` | PII is encrypted at rest and in transit |
+| `prohibit` | PII must not be processed by this agent at all |
+| `allow` | PII processing is permitted (triggers a validation warning under SEC framework) |
+
+### What `gitagent validate --compliance` checks for Reg S-P
+
+| Check | Severity |
+|-------|----------|
+| `pii_handling: allow` when `sec` is in frameworks | Warning |
+| Audit logging recommended when `sec` is in frameworks | Warning |
+
+<Warning>
+Setting `pii_handling: allow` with `sec` in the frameworks array will trigger a warning: `[Reg S-P] Framework "sec" with pii_handling "allow" may conflict with customer privacy requirements`. Use `redact`, `encrypt`, or `prohibit` for SEC-regulated agents.
+</Warning>
+
+### What `gitagent audit` reports for Reg S-P
+
+- PII handling policy defined
+- PII handling is restrictive (not `allow`)
+- Data classification set
+- Consent requirement configured
+- Cross-border assessment done
+- Bias testing enabled
+- LDA search configured
+
+## SEC Rule 17a-4 — Records Retention
+
+<Accordion title="What SEC 17a-4 requires">
+SEC Rule 17a-4 requires broker-dealers to preserve records in a non-rewriteable, non-erasable format for a minimum of three years (first two years in an accessible location). For AI agents this means audit logs must be immutable and retained for at least three years.
+</Accordion>
+
+SEC 17a-4 maps to the same `compliance.recordkeeping` section used for FINRA 4511:
+
+```yaml
+compliance:
+  recordkeeping:
+    audit_logging: true
+    log_format: structured_json
+    retention_period: 7y             # Minimum 3y for SEC 17a-4; 6y for FINRA 4511
+    log_contents:
+      - prompts_and_responses
+      - tool_calls
+      - decision_pathways
+      - model_version
+      - timestamps
+    immutable: true                  # Non-rewriteable, non-erasable — required by 17a-4
+```
+
+### What `gitagent audit` checks for SEC 17a-4
+
+`gitagent audit` checks the retention period against both the FINRA and SEC minimums:
+
+```
+if frameworks includes 'finra' and retention < 6 years:
+  warn: Retention may be below FINRA 4511 minimum (6 years)
+
+if frameworks includes 'sec' and retention < 3 years:
+  warn: Retention may be below SEC 17a-4 minimum (3 years)
+```
+
+<Note>
+If your agent includes both `finra` and `sec` in its frameworks, set `retention_period: 6y` or higher — the FINRA 4511 minimum of six years is the more restrictive requirement.
+</Note>
+
+## CFPB Circular 2022-03 — Fair Lending and Adverse Action
+
+<Accordion title="What CFPB Circular 2022-03 requires">
+CFPB Circular 2022-03 (Adverse Action Notification Requirements and the Equal Credit Opportunity Act) clarifies that creditors using complex algorithms — including AI models — to make credit decisions must still provide specific and actionable adverse action reasons. The "black box" nature of an algorithm is not a defense for failing to explain a credit denial. The circular also highlights the obligation to search for Less Discriminatory Alternatives (LDA) when using algorithmic models.
+</Accordion>
+
+CFPB requirements map to `compliance.data_governance`:
+
+```yaml
+compliance:
+  data_governance:
+    bias_testing: true    # Regular bias and fairness testing required
+    lda_search: true      # Less Discriminatory Alternative search documented
+```
+
+### What `gitagent validate --compliance` checks for CFPB
+
+| Check | Severity |
+|-------|----------|
+| `data_governance.bias_testing: true` when `cfpb` is in frameworks | Warning |
+
+<Note>
+The CFPB check is a warning, not an error. The validator recommends enabling `bias_testing` but does not block deployment if it is absent. For agents involved in credit decisions, enabling both `bias_testing` and `lda_search` is strongly recommended.
+</Note>
+
+### LDA search
+
+The `lda_search` flag indicates that the agent's model selection and scoring methodology has been evaluated for the availability of a Less Discriminatory Alternative — a model or approach that achieves a comparable business objective with less discriminatory impact on a protected class. Document LDA search results in `compliance/risk-assessment.md`.
+
+## Full data_governance example
+
+The following is the complete `data_governance` configuration from `examples/full/agent.yaml`, which handles all four frameworks (FINRA, Federal Reserve, SEC, CFPB):
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.0.0
+
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+
+  # Reg S-P (customer privacy) + CFPB Circular 2022-03 (fair lending)
+  data_governance:
+    pii_handling: redact
+    data_classification: restricted
+    consent_required: true
+    cross_border: false
+    bias_testing: true
+    lda_search: true
+
+  # SEC 17a-4 (records) — also satisfies FINRA 4511
+  recordkeeping:
+    audit_logging: true
+    log_format: structured_json
+    retention_period: 7y
+    log_contents:
+      - prompts_and_responses
+      - tool_calls
+      - decision_pathways
+      - model_version
+      - timestamps
+    immutable: true
+```
+
+<Tip>
+For credit decision agents, add ECOA/Reg B constraints directly to `RULES.md`: `Never use protected class information in credit decisions` and `Document adverse action reasons in specific, actionable terms`. These behavioral rules reinforce the data_governance configuration at the model instruction level.
+</Tip>

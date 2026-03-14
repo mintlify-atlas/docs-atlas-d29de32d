@@ -1,0 +1,130 @@
+---
+title: "Compliance overview"
+description: "First-class regulatory compliance baked into the GitAgent manifest — FINRA, Federal Reserve, SEC, and CFPB."
+---
+
+AI agents operating in financial services can touch customer data, influence decisions, and generate regulated communications. Compliance cannot be an afterthought — it needs to be embedded in the agent definition from day one.
+
+GitAgent treats compliance as a first-class citizen. Every regulatory requirement maps directly to a structured field in `agent.yaml`. There is no separate compliance layer to synchronize, no external configuration file to drift out of date. The manifest *is* the compliance record.
+
+```yaml
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+  supervision:
+    human_in_the_loop: always
+    kill_switch: true
+  recordkeeping:
+    audit_logging: true
+    retention_period: 7y
+    immutable: true
+```
+
+## Why compliance in the manifest?
+
+GitAgent's git-native design makes compliance properties version-controlled, diffable, and reviewable through standard pull request workflows. When a compliance setting changes — a retention period extended, a kill switch added, a new framework adopted — that change is a git commit with an author, timestamp, and diff. This is the audit trail regulators expect.
+
+Running `git diff` between two agent versions shows exactly which compliance controls changed and when. Running `git blame` traces every compliance field to the person who wrote it.
+
+## Supported frameworks
+
+| Framework | Key rules | Coverage |
+|-----------|-----------|----------|
+| **FINRA** | Rule 3110 (Supervision), Rule 4511 (Recordkeeping), Rule 2210 (Communications), Reg Notice 24-09 | `compliance.supervision`, `compliance.recordkeeping`, `compliance.communications` |
+| **Federal Reserve** | SR 11-7 (Model Risk Management), SR 23-4 (Third-Party Risk) | `compliance.model_risk`, `compliance.vendor_management` |
+| **SEC** | Reg S-P (Customer Privacy), 17a-4 (Records) | `compliance.data_governance`, `compliance.recordkeeping` |
+| **CFPB** | Circular 2022-03 (Fair Lending) | `compliance.data_governance.bias_testing`, `compliance.data_governance.lda_search` |
+
+<Note>
+The `frameworks` array accepts any string value. Standard values are `finra`, `federal_reserve`, `sec`, and `cfpb`, but non-US frameworks such as `eu_ai_act`, `uk_fca`, `mas_singapore`, and `gdpr` are also accepted.
+</Note>
+
+## Risk tiers
+
+Every agent with a `compliance` section must declare a risk tier. The tier determines which controls are required versus recommended, and which compliance artifacts must exist on disk.
+
+| Tier | Requirements |
+|------|--------------|
+| `low` | Minimal — standard logging |
+| `standard` | Audit logging recommended |
+| `high` | Human-in-the-loop required, audit logging required, compliance artifacts required |
+| `critical` | All of `high` plus kill switch, immutable logs, quarterly validation |
+
+See [Risk tiers](/compliance/risk-tiers) for the full breakdown of what each tier requires and the compliance artifacts expected on disk.
+
+## Compliance artifacts
+
+For `high` and `critical` risk tiers, GitAgent expects a `compliance/` directory at the root of the agent repository:
+
+```
+compliance/
+├── risk-assessment.md        # Risk tier justification and sign-offs
+├── regulatory-map.yaml       # Capability-to-rule control mappings
+└── validation-schedule.yaml  # Validation cadence and ownership
+```
+
+`gitagent validate --compliance` will warn if these files are missing for high/critical agents. `gitagent audit` reports on their presence as part of the compliance checklist.
+
+## Validating compliance in CI/CD
+
+Run `gitagent validate --compliance` on every push to catch compliance regressions before they reach production:
+
+```bash
+gitagent validate --compliance
+gitagent validate -d ./my-agent --compliance
+```
+
+What the compliance validator checks:
+
+- `risk_tier` is present when a `compliance` section exists
+- `high`/`critical` tiers have `human_in_the_loop` set to `always` or `conditional`
+- `high`/`critical` tiers have `audit_logging: true`
+- FINRA framework: `communications.fair_balanced` and `communications.no_misleading` are `true`
+- Federal Reserve framework: `model_risk` section exists with `ongoing_monitoring: true`
+- SEC framework: audit logging and PII handling checks
+- CFPB framework: `bias_testing` recommendation
+- Compliance artifacts directory check for `high`/`critical` tiers
+- Vendor management metadata for all dependencies
+- Full segregation of duties conflict matrix validation
+
+<Warning>
+Compliance validation failures exit with a non-zero status code, blocking CI/CD pipelines. Warnings are informational and do not block the build.
+</Warning>
+
+## Generating audit reports
+
+Run `gitagent audit` to produce a section-by-section compliance checklist against your agent configuration:
+
+```bash
+gitagent audit
+gitagent audit -d ./examples/full
+```
+
+The report covers all nine compliance sections with pass/fail/warning indicators. See [Audit reports](/compliance/audit) for the full report structure and how to interpret results.
+
+## Explore each framework
+
+<CardGroup cols={2}>
+  <Card title="Risk tiers" icon="layer-group" href="/compliance/risk-tiers">
+    Four tiers from low to critical, with a table of what each one requires.
+  </Card>
+  <Card title="FINRA" icon="building-columns" href="/compliance/finra">
+    Rules 3110, 4511, 2210, and Reg Notice 24-09 — supervision, recordkeeping, and communications.
+  </Card>
+  <Card title="Federal Reserve" icon="landmark" href="/compliance/federal-reserve">
+    SR 11-7 model risk management and SR 23-4 third-party risk.
+  </Card>
+  <Card title="SEC & CFPB" icon="scale-balanced" href="/compliance/sec-cfpb">
+    Reg S-P customer privacy, 17a-4 records, and CFPB fair lending.
+  </Card>
+  <Card title="Segregation of duties" icon="users" href="/compliance/segregation-of-duties">
+    Roles, conflict matrix, handoff workflows, and enforcement modes.
+  </Card>
+  <Card title="Audit reports" icon="clipboard-check" href="/compliance/audit">
+    The `gitagent audit` command — all nine report sections explained.
+  </Card>
+</CardGroup>

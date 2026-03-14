@@ -1,0 +1,85 @@
+---
+title: 'gitagent install'
+description: 'Resolve and install git-based agent dependencies declared in agent.yaml.'
+sidebarTitle: 'install'
+---
+
+## Synopsis
+
+```bash
+gitagent install [options]
+```
+
+## Description
+
+`gitagent install` reads the `dependencies` array from `agent.yaml` and resolves each entry to a local directory. This makes sub-agents and shared components available at the paths the main agent expects.
+
+## Options
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory containing the `agent.yaml` with a `dependencies` section.
+</ParamField>
+
+## How dependencies are resolved
+
+For each entry in the `dependencies` array of `agent.yaml`:
+
+| Source type | Behavior |
+|-------------|----------|
+| Local path | Copied to the mount point |
+| Git URL | Shallow-cloned at the specified `version` or branch |
+
+The target directory is determined by:
+
+1. The `mount` field on the dependency (e.g. `agents/fact-checker`), if set
+2. Otherwise `.gitagent/deps/<name>`
+
+After installation, the command validates that each installed dependency contains an `agent.yaml` file. Dependencies without an `agent.yaml` produce an error.
+
+## Dependency declaration
+
+Dependencies are declared in `agent.yaml` under the `dependencies` key:
+
+```yaml
+dependencies:
+  - name: fact-checker
+    source: https://github.com/org/fact-checker.git
+    version: ^1.0.0
+    mount: agents/fact-checker
+    vendor_management:
+      due_diligence_date: "2024-01-15"
+      soc_report: true
+      risk_assessment: low
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Identifier for this dependency |
+| `source` | Git URL or local path |
+| `version` | Branch, tag, or semantic version constraint |
+| `mount` | Directory to install into (relative to the agent root) |
+| `vendor_management` | Optional metadata for regulatory compliance (SR 23-4) |
+
+<Note>
+  For agents with `finra` or `federal_reserve` compliance frameworks, `vendor_management` metadata is required on each dependency. `gitagent validate --compliance` and `gitagent audit` will warn if it is missing.
+</Note>
+
+## Examples
+
+<CodeGroup>
+
+```bash Install dependencies for the current agent
+gitagent install
+```
+
+```bash Install dependencies for a specific agent directory
+gitagent install -d ./my-agent
+```
+
+</CodeGroup>
+
+## Related commands
+
+- [validate](/cli/validate) — Validate the agent and its dependencies
+- [audit](/cli/audit) — Check vendor management metadata on dependencies
+- [run](/cli/run) — Run the agent (dependencies must be installed first)

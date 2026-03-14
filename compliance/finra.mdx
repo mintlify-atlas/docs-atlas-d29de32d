@@ -1,0 +1,222 @@
+---
+title: "FINRA compliance"
+description: "How GitAgent maps to FINRA Rules 3110, 4511, and 2210, plus Regulatory Notice 24-09 on GenAI and LLMs."
+---
+
+GitAgent supports FINRA regulatory obligations through structured fields in `agent.yaml`. Declare `finra` in your `frameworks` array and the validator enforces the required controls automatically.
+
+```yaml
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+```
+
+## Rule 3110 — Supervision
+
+<Accordion title="What Rule 3110 requires">
+FINRA Rule 3110 requires member firms to establish and maintain a supervisory system for all activities, including those conducted by AI agents. For agents: a principal must be designated, review must happen on a defined cadence, and the system must support human override and immediate halt.
+</Accordion>
+
+Rule 3110 maps to the `compliance.supervision` section:
+
+```yaml
+compliance:
+  supervision:
+    designated_supervisor: chief-compliance-officer  # Principal responsible for oversight
+    review_cadence: monthly                          # How often the agent is reviewed
+    human_in_the_loop: always                        # always | conditional | advisory | none
+    escalation_triggers:
+      - confidence_below: 0.85                       # Escalate on low confidence
+      - action_type: regulatory_filing               # Escalate before regulatory filings
+      - action_type: customer_communication          # Escalate before customer comms
+      - action_type: credit_decision                 # Escalate for credit decisions
+      - error_detected: true                         # Escalate on detected errors
+    override_capability: true                        # Humans can override any decision
+    kill_switch: true                                # Immediate halt capability
+```
+
+### What `gitagent validate --compliance` checks for Rule 3110
+
+| Check | Severity |
+|-------|----------|
+| `supervision.human_in_the_loop` is `always` or `conditional` for `high`/`critical` tiers | Error |
+| Supervision section exists when `finra` is in frameworks | Warning |
+| Designated supervisor assigned | (audit report) |
+| Escalation triggers defined | (audit report) |
+| Kill switch enabled for `critical` tier | Warning |
+
+<Warning>
+For `high` and `critical` risk tiers, `human_in_the_loop` must be `always` or `conditional`. Setting it to `none` is a validation error that blocks deployment.
+</Warning>
+
+### Claude Code integration
+
+When `human_in_the_loop` is set to `always`, the Claude runner automatically passes `--permission-mode plan` to the Claude Code CLI, requiring human approval before any tool is executed.
+
+## Rule 4511 — Recordkeeping
+
+<Accordion title="What Rule 4511 requires">
+FINRA Rule 4511 (Books and Records) requires firms to make and preserve records of all communications and activities. For AI agents this means: log every prompt, response, tool call, and decision pathway. Minimum retention is six years. Records must be in a format that cannot be altered.
+</Accordion>
+
+Rule 4511 maps to the `compliance.recordkeeping` section:
+
+```yaml
+compliance:
+  recordkeeping:
+    audit_logging: true              # Log all decisions and actions
+    log_format: structured_json      # structured_json | plaintext
+    retention_period: 7y             # Must be at minimum 6y for FINRA 4511
+    log_contents:
+      - prompts_and_responses        # Full I/O logging
+      - tool_calls                   # Intermediate tool invocations
+      - decision_pathways            # Reasoning traces
+      - model_version                # Which model version was used
+      - timestamps                   # ISO 8601
+    immutable: true                  # Logs cannot be modified after write
+```
+
+### What `gitagent validate --compliance` checks for Rule 4511
+
+| Check | Severity |
+|-------|----------|
+| `recordkeeping.audit_logging: true` for `high`/`critical` tiers | Error |
+| `audit_logging` recommended when `finra` is in frameworks | Warning |
+| Retention period below 6 years | Warning |
+
+### What `gitagent audit` reports for Rule 4511
+
+The audit report checks all recordkeeping fields and warns if retention is below the FINRA minimum:
+
+- Audit logging enabled
+- Log format specified
+- Retention period defined
+- `prompts_and_responses` in `log_contents`
+- `tool_calls` in `log_contents`
+- `decision_pathways` in `log_contents`
+- `model_version` in `log_contents`
+- `timestamps` in `log_contents`
+- Immutable logs configured
+
+<Warning>
+FINRA Rule 4511 requires a minimum retention period of **six years**. If `retention_period` is below `6y`, `gitagent audit` will emit a warning. For FINRA-regulated agents, set `retention_period: 6y` at minimum — the example above uses `7y`.
+</Warning>
+
+## Rule 2210 — Communications with the Public
+
+<Accordion title="What Rule 2210 requires">
+FINRA Rule 2210 governs communications with the public. It requires that all communications be fair and balanced, contain no misleading statements, include required disclosures, and — for retail communications — receive principal pre-approval before distribution.
+</Accordion>
+
+Rule 2210 maps to the `compliance.communications` section:
+
+```yaml
+compliance:
+  communications:
+    type: institutional              # correspondence | retail | institutional
+    pre_review_required: true        # Requires principal pre-approval
+    fair_balanced: true              # Must be fair and balanced
+    no_misleading: true              # No misleading statements
+    disclosures_required: true       # AI-generated nature must be disclosed
+```
+
+**Communication types:**
+
+| Type | Description |
+|------|-------------|
+| `correspondence` | One-on-one communications with a specific customer |
+| `retail` | Communications with retail investors; principal pre-review typically required |
+| `institutional` | Communications with institutional investors |
+
+### What `gitagent validate --compliance` checks for Rule 2210
+
+| Check | Severity |
+|-------|----------|
+| `communications.fair_balanced: true` when `finra` is in frameworks | **Error** |
+| `communications.no_misleading: true` when `finra` is in frameworks | **Error** |
+| `communications` section recommended when `finra` is in frameworks | Warning |
+| Retail communications without `pre_review_required` | Warning |
+
+<Warning>
+`fair_balanced` and `no_misleading` are the only two compliance settings that cause **errors** (not warnings) purely from framework inclusion, regardless of risk tier. If `finra` is in your `frameworks` array, both must be `true`.
+</Warning>
+
+### What `gitagent audit` reports for Rule 2210
+
+- Communication type classified
+- Fair and balanced enforced
+- No misleading enforced
+- Pre-review requirement assessed
+- Disclosure requirements assessed
+- Warning if `type: retail` and `pre_review_required` is not set
+
+## Regulatory Notice 24-09 — GenAI and LLMs
+
+<Accordion title="What Reg Notice 24-09 states">
+FINRA Regulatory Notice 24-09 clarifies that existing FINRA rules — including Rules 3110, 4511, and 2210 — apply to the use of generative AI and large language models by member firms and their associated persons. There are no new AI-specific rules; the existing rulebook governs AI agents.
+</Accordion>
+
+This means that an AI agent conducting supervisory activities, generating customer communications, or maintaining records is subject to the same FINRA rules that govern human registered representatives performing those activities. GitAgent's compliance configuration directly addresses each of these obligations.
+
+<Note>
+FINRA Regulatory Notice 25-07 (Modernizing Workplaces) also addresses GenAI recordkeeping obligations. FINRA Regulatory Notice 21-29 addresses outsourcing to third-party vendors — relevant when using dependency agents. See [Federal Reserve compliance](/compliance/federal-reserve) for SR 23-4 vendor management requirements.
+</Note>
+
+## Full FINRA compliance example
+
+The following is the complete compliance configuration from `examples/full/agent.yaml` with all FINRA-relevant sections:
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.0.0
+description: Financial compliance analysis agent for FINRA and Federal Reserve regulated environments
+
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+
+  # FINRA Rule 3110 — Supervision
+  supervision:
+    designated_supervisor: chief-compliance-officer
+    review_cadence: monthly
+    human_in_the_loop: always
+    escalation_triggers:
+      - confidence_below: 0.85
+      - action_type: regulatory_filing
+      - action_type: customer_communication
+      - action_type: credit_decision
+      - error_detected: true
+    override_capability: true
+    kill_switch: true
+
+  # FINRA Rule 4511 — Recordkeeping
+  recordkeeping:
+    audit_logging: true
+    log_format: structured_json
+    retention_period: 7y
+    log_contents:
+      - prompts_and_responses
+      - tool_calls
+      - decision_pathways
+      - model_version
+      - timestamps
+    immutable: true
+
+  # FINRA Rule 2210 — Communications
+  communications:
+    type: institutional
+    pre_review_required: true
+    fair_balanced: true
+    no_misleading: true
+    disclosures_required: true
+```
+
+<Tip>
+Add explicit FINRA rule constraints to `RULES.md` alongside the `agent.yaml` configuration. The `RULES.md` file is loaded as behavioral instructions for the agent, so putting `Never make misleading statements (FINRA 2210)` directly in the rules section ensures the model treats these as hard behavioral constraints.
+</Tip>

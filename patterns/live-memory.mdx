@@ -1,0 +1,156 @@
+---
+title: "Live agent memory"
+description: "Persist knowledge across sessions using the memory/ directory — MEMORY.md as working state, memory.yaml for configuration, and archive/ for historical snapshots."
+---
+
+By default, LLM agents are stateless — each session starts cold. The live memory pattern gives agents a persistent store that survives across sessions: a `memory/` directory committed to the same git repo as the agent definition.
+
+Adapters read `memory/MEMORY.md` and include it in the system prompt at the start of every session, giving the agent continuity without external databases.
+
+## Memory directory structure
+
+```
+memory/
+├── MEMORY.md       # Working memory — current state (max 200 lines)
+├── memory.yaml     # Memory configuration
+└── archive/        # Historical snapshots (rotated monthly)
+```
+
+### MEMORY.md
+
+The primary working memory file. Hard limit of **200 lines** — this keeps the memory footprint small enough to include in every system prompt without consuming most of the context window.
+
+The agent writes to this file at session end (or on explicit save). When the file approaches 200 lines, older entries should be archived to `archive/`.
+
+**Example MEMORY.md:**
+
+```markdown
+# Memory
+
+This file tracks persistent state across sessions. Max 200 lines.
+
+## Recent Analyses
+- 2026-03-10: Reviewed Q1 compliance report — 3 HIGH findings, all remediated
+- 2026-03-07: Analyzed broker communication for FINRA 2210 — passed
+
+## Key Findings
+- Firm uses structured_json audit format — consistent with 4511 requirements
+- PII handling policy updated 2026-02-15 — now uses redact mode
+
+## Open Questions
+- Pending: SR 11-7 quarterly validation due 2026-04-01
+- Clarification needed: cross-border data transfer policy for EU clients
+```
+
+### Common memory file patterns
+
+The `memory/runtime/` subfolder (referenced in the README) is used for live agent state during a session:
+
+| File | Purpose |
+|------|---------|
+| `dailylog.md` | Chronological log of actions taken in the current day |
+| `key-decisions.md` | Significant decisions with reasoning and confidence |
+| `context.md` | Active context: current task, relevant entities, open threads |
+
+### memory.yaml
+
+Controls memory behavior — layer definitions, update triggers, archival policy, and retention:
+
+```yaml
+layers:
+  - name: working
+    path: MEMORY.md
+    max_lines: 200
+    format: markdown
+  - name: archive
+    path: archive/
+    format: yaml
+    rotation: monthly
+update_triggers:
+  - on_session_end
+  - on_explicit_save
+archive_policy:
+  max_entries: 1000
+  compress_after: 90d
+  retention_period: 7y
+```
+
+**`layers`** — Define one or more memory layers. The `working` layer is the live MEMORY.md. The `archive` layer receives rotated snapshots.
+
+**`update_triggers`** — When the agent writes memory back to disk:
+- `on_session_end` — Flush at the end of every session
+- `on_explicit_save` — Only when the agent explicitly calls a save action
+
+**`archive_policy`** — Controls snapshot rotation:
+- `max_entries` — Maximum number of archived entries before pruning
+- `compress_after` — Compress entries older than this threshold
+- `retention_period` — Minimum retention (e.g., `7y` for 7 years)
+
+<Note>
+  For regulated agents, the `retention_period` in `archive_policy` should align with the recordkeeping retention period in `compliance.recordkeeping`. FINRA Rule 4511 requires a minimum of 6 years.
+</Note>
+
+## How adapters use memory
+
+When exporting to a system prompt (via `gitagent export --format system-prompt` or any runner), the adapter reads `MEMORY.md` and appends its content to the system prompt if it has any non-empty content:
+
+```
+[Agent identity from SOUL.md]
+[Rules from RULES.md]
+[Active skills]
+[Knowledge documents marked always_load]
+[Compliance constraints]
+[Memory content from MEMORY.md]   ← injected here if non-empty
+```
+
+This means the agent receives its accumulated memory at the start of every session — no external retrieval, no vector database, no infrastructure.
+
+```bash
+# Preview what the agent sees at session start (includes memory)
+gitagent export --format system-prompt
+
+# Run agent — memory is automatically included in context
+gitagent run -d ./my-agent
+```
+
+## Writing to memory
+
+Agents write to memory in two ways:
+
+1. **At session end** — triggered by `on_session_end` in `update_triggers`. The agent summarizes the session and appends to MEMORY.md.
+2. **Explicit save** — the agent decides mid-session that something is worth persisting, and writes directly to MEMORY.md.
+
+Because memory lives in the git repo, every write is a candidate for a commit. This gives the memory store the same full audit history as the agent definition itself.
+
+<Tip>
+  For human-in-the-loop workflows, treat memory writes the same as skill changes: commit to a branch and open a PR. This gives supervisors visibility into what the agent is learning between sessions.
+</Tip>
+
+## Memory and git
+
+Memory files are regular files in the git repository. This means:
+
+- `git log memory/MEMORY.md` — full history of every memory write
+- `git diff HEAD~1 memory/MEMORY.md` — see exactly what changed in the last session
+- `git revert <commit>` — roll back a bad memory write
+- Memory can be branched, reviewed, and merged just like code
+
+```bash
+# See memory change history
+git log --oneline memory/MEMORY.md
+
+# See what was written in the last session
+git diff HEAD~1 memory/MEMORY.md
+
+# Roll back a bad memory write
+git revert <bad-commit-hash>
+```
+
+<CardGroup cols={2}>
+  <Card title="Human-in-the-loop" href="/patterns/human-in-the-loop">
+    Open a PR for memory writes so humans can review what the agent is learning.
+  </Card>
+  <Card title="Agent versioning" href="/patterns/agent-versioning">
+    Memory history is part of the agent's full git history — roll back to any past state.
+  </Card>
+</CardGroup>

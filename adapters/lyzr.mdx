@@ -1,0 +1,133 @@
+---
+title: 'Lyzr adapter'
+description: 'Deploy your agent to Lyzr Studio and query it via the inference API.'
+---
+
+The Lyzr adapter exports your agent definition as a JSON payload for the Lyzr Studio API. The runner creates the agent on Lyzr Studio (once), saves the agent ID to `.lyzr_agent_id` for reuse, then sends the prompt via the inference chat endpoint.
+
+## Export format
+
+Running `gitagent export --format lyzr` produces a JSON object ready to POST to the Lyzr agent creation endpoint.
+
+```bash
+gitagent export --format lyzr
+gitagent export --format lyzr -d ./examples/lyzr-agent
+```
+
+### Payload structure
+
+```json
+{
+  "name": "research-assistant",
+  "description": "Researches topics and summarizes findings",
+  "agent_role": "Expert research assistant with deep analytical skills",
+  "agent_goal": "Deliver accurate, well-sourced research summaries",
+  "agent_instructions": "<full system prompt>",
+  "provider_id": "OpenAI",
+  "model": "gpt-4.1",
+  "temperature": 0.3,
+  "top_p": 0.9,
+  "llm_credential_id": "lyzr_openai",
+  "store_messages": true,
+  "features": [
+    {
+      "type": "MEMORY",
+      "config": { "max_messages_context_count": 50 },
+      "priority": 0
+    }
+  ],
+  "file_output": false
+}
+```
+
+### Field sources
+
+| Field | Source |
+|-------|--------|
+| `name` | `agent.yaml` → `name` |
+| `description` | `agent.yaml` → `description` |
+| `agent_role` | First non-empty line of `SOUL.md` `## Core Identity` section; falls back to `description` |
+| `agent_goal` | First non-empty line of `SOUL.md` `## Values` / `## Purpose` / `## Goal` / `## Mission` section; falls back to `description` |
+| `agent_instructions` | SOUL.md + RULES.md + skills + compliance constraints + memory |
+| `provider_id` | Mapped from model name (see table below) |
+| `model` | `agent.yaml` → `model.preferred` |
+| `temperature` | `model.constraints.temperature` → `runtime.temperature` → `0.3` |
+| `top_p` | `model.constraints.top_p` → `0.9` |
+| `llm_credential_id` | Mapped from provider (see table below) |
+| `features` | Memory feature enabled by default (`max_messages_context_count: 50`) |
+
+### Model-to-provider mapping
+
+| Model prefix | `provider_id` | `llm_credential_id` |
+|-------------|---------------|---------------------|
+| `claude-*` | `Anthropic` | `lyzr_anthropic` |
+| `gpt-*`, `o1-*`, `o3-*` | `OpenAI` | `lyzr_openai` |
+| `gemini-*` | `Google` | `lyzr_google` |
+| *(default / unrecognized)* | `OpenAI` | `lyzr_openai` |
+
+### agent_instructions contents
+
+The `agent_instructions` field is assembled from (in order):
+
+1. `SOUL.md`
+2. `RULES.md` (prefixed with `## Rules`)
+3. Each skill: name, description, allowed tools, and instructions
+4. Compliance constraints (human-in-the-loop, fair/balanced, no misleading, PII redaction)
+5. Memory content from `memory/MEMORY.md` (if it has more than 2 lines)
+
+## Runner behavior
+
+<Steps>
+  <Step title="Verify LYZR_API_KEY">
+    Checks for `LYZR_API_KEY` in the environment (or `--api-key` flag). Exits with an error if missing.
+  </Step>
+  <Step title="Require prompt">
+    Lyzr has no interactive mode. If `-p` is not provided, the runner exits with an error.
+  </Step>
+  <Step title="Resolve or create agent">
+    If `.lyzr_agent_id` exists in the agent directory, the saved ID is reused. Otherwise, the agent is created via `POST /v3/agents/template/single-task` and the returned `agent_id` is saved to `.lyzr_agent_id`.
+  </Step>
+  <Step title="Send prompt">
+    Posts to `POST /v3/inference/chat/` with the agent ID, a generated session ID (`<agent_id>-<random-hex>`), and the prompt message.
+  </Step>
+  <Step title="Print response">
+    Reads `response`, `result`, or `message` from the API response and prints it to stdout.
+  </Step>
+</Steps>
+
+```bash
+export LYZR_API_KEY="lyzr-..."
+gitagent run -d ./my-agent -a lyzr -p "What are the key AI trends this quarter?"
+```
+
+### API endpoints
+
+Base URL: `https://agent-prod.studio.lyzr.ai`
+
+| Endpoint | Method | Purpose |
+|----------|--------|--------|
+| `/v3/agents/template/single-task` | `POST` | Create agent |
+| `/v3/agents/template/single-task/{id}` | `PUT` | Update agent |
+| `/v3/agents/{id}` | `GET` | Fetch agent |
+| `/v3/inference/chat/` | `POST` | Chat with agent |
+
+### Agent ID persistence
+
+The `.lyzr_agent_id` file in the agent directory stores the Lyzr agent ID after first creation. Subsequent `gitagent run -a lyzr` calls reuse this ID, avoiding redundant agent creation. You can also manage this file directly using the `gitagent lyzr` subcommands.
+
+```bash
+# View the saved agent ID
+gitagent lyzr info -d ./my-agent
+
+# Force update the Lyzr agent definition
+gitagent lyzr update -d ./my-agent
+```
+
+## Requirements
+
+- `LYZR_API_KEY` environment variable set (get yours from [Lyzr Studio](https://studio.lyzr.ai))
+- `-p` prompt is required
+
+<Warning>
+Lyzr has no interactive session mode via this runner. `-p` is always required.
+</Warning>

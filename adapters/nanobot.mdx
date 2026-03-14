@@ -1,0 +1,119 @@
+---
+title: 'Nanobot adapter'
+description: 'Write a Nanobot config.json and system prompt, then run an interactive or one-shot agent session.'
+---
+
+The Nanobot adapter exports your agent as a `config.json` (provider and model configuration) plus a system prompt Markdown file. It supports both interactive sessions and one-shot prompt mode, and auto-provisions authentication from `ANTHROPIC_API_KEY`.
+
+## Export format
+
+Running `gitagent export --format nanobot` prints both files concatenated with section headers.
+
+```bash
+gitagent export --format nanobot
+gitagent export --format nanobot -d ./my-agent
+```
+
+### config.json structure
+
+The config uses Nanobot's `providers` + `agents.defaults` structure. Model names are mapped to `provider/model` format:
+
+| gitagent model | Nanobot model |
+|---------------|---------------|
+| `claude-opus-4-6` | `anthropic/claude-opus-4-6` |
+| `gpt-4.1` | `openai/gpt-4.1` |
+| `o1-preview` | `openai/o1-preview` |
+| Already has `/` | Passed through unchanged |
+| *(default)* | `anthropic/claude-sonnet-4-5-20250929` |
+
+```json
+{
+  "providers": {
+    "anthropic": {
+      "apiKey": "${ANTHROPIC_API_KEY}"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-sonnet-4-5-20250929"
+    }
+  }
+}
+```
+
+### System prompt contents
+
+The system prompt Markdown file is built from (in order):
+
+1. Agent name and version header + description
+2. `SOUL.md`
+3. `RULES.md`
+4. Each skill: name, description, allowed tools, and full instructions
+5. Knowledge documents marked `always_load: true` in `knowledge/index.yaml`
+6. Available tools — names and descriptions from `tools/*.yaml`
+7. Compliance constraints (human-in-the-loop, fair/balanced, no misleading, PII handling)
+8. Memory content from `memory/MEMORY.md` (if it has more than 2 lines)
+
+## Runner behavior
+
+<Steps>
+  <Step title="Auto-provision auth">
+    Reads `ANTHROPIC_API_KEY` from the environment and writes `~/.nanobot/config.json` if it does not already exist.
+  </Step>
+  <Step title="Create temp config directory">
+    Creates a temp directory (e.g., `/tmp/gitagent-nanobot-a1b2c3d4/`) and writes two files:
+    - `config.json` — provider and model configuration
+    - `system-prompt.md` — the full system prompt
+  </Step>
+  <Step title="Build CLI arguments">
+    Starts with `nanobot agent`. If `-p` is provided, appends `--message <prompt>` for one-shot mode.
+  </Step>
+  <Step title="Launch Nanobot">
+    Spawns `nanobot` with stdio inherited and two environment variables:
+    - `NANOBOT_CONFIG` pointing to the temp `config.json`
+    - `NANOBOT_SYSTEM_PROMPT` containing the full system prompt string
+  </Step>
+  <Step title="Clean up">
+    Recursively removes the temp config directory after execution.
+  </Step>
+</Steps>
+
+### Interactive mode
+
+Without `-p`, the runner starts an interactive session:
+
+```bash
+gitagent run -d ./my-agent -a nanobot
+# Starts interactive mode. Type your messages to chat.
+```
+
+### One-shot mode
+
+With `-p`, the runner sends a single message and exits:
+
+```bash
+gitagent run -d ./my-agent -a nanobot -p "Summarize the compliance requirements"
+```
+
+### Environment variables set by runner
+
+| Variable | Value |
+|----------|-------|
+| `NANOBOT_CONFIG` | Path to temp `config.json` |
+| `NANOBOT_SYSTEM_PROMPT` | Full system prompt string |
+
+## Requirements
+
+- Nanobot installed:
+
+```bash
+pip install nanobot-ai
+# or
+uv tool install nanobot-ai
+```
+
+- `ANTHROPIC_API_KEY` environment variable set (auto-provisioned to `~/.nanobot/config.json`)
+
+<Tip>
+Nanobot supports both interactive and one-shot modes, making it a good choice for both development sessions and scripted pipelines.
+</Tip>

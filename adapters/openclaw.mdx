@@ -1,0 +1,113 @@
+---
+title: 'OpenClaw adapter'
+description: 'Build an OpenClaw workspace from your agent definition and run a local agent session.'
+---
+
+The OpenClaw adapter exports your agent as a structured OpenClaw workspace — a directory containing `openclaw.json`, `AGENTS.md`, `SOUL.md`, tool definitions, and skill files. The runner auto-provisions authentication, creates a temporary workspace, and launches an OpenClaw agent session.
+
+## Export format
+
+Running `gitagent export --format openclaw` prints all workspace files concatenated with section headers.
+
+```bash
+gitagent export --format openclaw
+gitagent export --format openclaw -d ./my-agent
+```
+
+The export produces these files:
+
+| File | Contents |
+|------|----------|
+| `openclaw.json` | Agent config: model (provider/model format), workspace path, temperature, maxTurns, maxTokens |
+| `AGENTS.md` | Agent identity header + RULES.md + knowledge (always_load) + compliance constraints + sub-agent listing |
+| `SOUL.md` | Passthrough from your agent's SOUL.md (or synthesized from name/description) |
+| `TOOLS.md` | Tool definitions from `tools/*.yaml` with parameter tables |
+| `skills/<name>/SKILL.md` | Each skill's SKILL.md, passed through unchanged |
+
+### openclaw.json structure
+
+Model names are mapped to `provider/model` format:
+
+| gitagent model | openclaw.json model |
+|---------------|--------------------|
+| `claude-opus-4-6` | `anthropic/claude-opus-4-6` |
+| `gpt-4.1` | `openai/gpt-4.1` |
+| `anthropic/claude-sonnet-4-5` | `anthropic/claude-sonnet-4-5` *(passthrough)* |
+| Already namespaced | Passed through unchanged |
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-sonnet-4-5-20250929",
+    "workspace": "~/.openclaw/workspace",
+    "temperature": 0.2,
+    "maxTurns": 20,
+    "maxTokens": 4096
+  }
+}
+```
+
+### AGENTS.md structure
+
+The `AGENTS.md` file contains:
+
+1. Agent name, version, and description header
+2. Author (if set in `agent.yaml`)
+3. `RULES.md` content
+4. Knowledge base — documents from `knowledge/index.yaml` with `always_load: true`
+5. Compliance constraints as a bullet list (human-in-the-loop, escalation triggers, fair/balanced, no misleading, PII handling)
+6. Sub-agents listing with name, description, delegation mode, and triggers
+
+## Runner behavior
+
+<Steps>
+  <Step title="Auto-provision auth">
+    Reads `ANTHROPIC_API_KEY` from the environment and writes it to `~/.openclaw/agents/main/agent/auth-profiles.json` if the file does not already exist.
+  </Step>
+  <Step title="Create temporary workspace">
+    Creates a temp directory (e.g., `/tmp/gitagent-openclaw-a1b2c3d4/`) and writes all workspace files: `openclaw.json`, `AGENTS.md`, `SOUL.md`, `TOOLS.md` (if tools exist), and each skill under `skills/<name>/SKILL.md`.
+  </Step>
+  <Step title="Require prompt">
+    OpenClaw requires `--message`. If `-p` is not provided, the runner exits with an error and cleans up the workspace.
+  </Step>
+  <Step title="Map compliance to thinking level">
+    If `compliance.supervision.human_in_the_loop: always` is set, adds `--thinking high` to the OpenClaw arguments.
+  </Step>
+  <Step title="Launch OpenClaw">
+    Runs `openclaw agent --local --session-id <id> --message <prompt>` from the temp workspace directory with `OPENCLAW_CONFIG` pointing to the written config file.
+  </Step>
+  <Step title="Clean up">
+    Recursively removes the temp workspace after execution.
+  </Step>
+</Steps>
+
+```bash
+gitagent run -d ./my-agent -a openclaw -p "Review my authentication module"
+gitagent run -r https://github.com/user/agent -a openclaw -p "Summarize findings"
+```
+
+### Session ID
+
+The runner generates a session ID in the format `gitagent-<agent-name>-<random-hex>`, for example `gitagent-compliance-analyst-a1b2c3d4`.
+
+### Compliance: thinking level
+
+When `human_in_the_loop: always` is configured, the runner maps this to OpenClaw's `--thinking high` flag, which enables extended reasoning before producing a response.
+
+```yaml
+# agent.yaml
+compliance:
+  supervision:
+    human_in_the_loop: always
+# Runner adds: openclaw agent --thinking high ...
+```
+
+## Requirements
+
+- OpenClaw CLI installed
+- `ANTHROPIC_API_KEY` environment variable set
+- `-p` prompt is required (OpenClaw has no interactive REPL mode via this runner)
+
+<Warning>
+`-p` is required for this adapter. Running without a prompt will exit with an error.
+</Warning>

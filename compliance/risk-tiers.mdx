@@ -1,0 +1,143 @@
+---
+title: "Risk tiers"
+description: "Four risk tiers — low, standard, high, and critical — each with distinct control requirements and compliance artifact expectations."
+---
+
+Every agent with a `compliance` section in `agent.yaml` must declare a `risk_tier`. The tier drives which controls are required by the validator, which compliance artifacts must exist on disk, and how strictly `gitagent validate --compliance` enforces requirements.
+
+## The four tiers
+
+| Tier | Requirements |
+|------|--------------|
+| `low` | Minimal — standard logging |
+| `standard` | Audit logging recommended |
+| `high` | Human-in-the-loop required, audit logging required, compliance artifacts required |
+| `critical` | All of `high` plus kill switch, immutable logs, quarterly validation |
+
+### low
+
+For agents that perform low-stakes internal tasks, have no customer impact, and do not operate under specific regulatory mandates. Standard platform logging is sufficient. No additional compliance controls are required.
+
+### standard
+
+For agents with moderate operational exposure. Audit logging is recommended but not enforced by the validator. Suitable for internal productivity agents that handle non-sensitive data.
+
+### high
+
+For agents operating in regulated environments or with meaningful customer or financial impact. The validator **requires**:
+
+- `supervision.human_in_the_loop` must be `always` or `conditional`
+- `recordkeeping.audit_logging` must be `true`
+- Compliance artifacts directory (`compliance/`) is expected on disk
+
+The validator will **warn** if:
+
+- `model_risk.validation_cadence` is set to `annual` or `semi_annual` — quarterly or more frequent is recommended
+- SOD enforcement is set to `advisory` rather than `strict`
+- `compliance/risk-assessment.md`, `compliance/regulatory-map.yaml`, or `compliance/validation-schedule.yaml` are missing
+
+### critical
+
+For agents with the highest operational risk — those influencing critical financial decisions, customer-facing regulatory filings, or processes with systemic risk. All `high` requirements apply, plus:
+
+- Kill switch is expected (`supervision.kill_switch: true`)
+- Immutable logs are expected (`recordkeeping.immutable: true`)
+- Quarterly validation is expected (`model_risk.validation_cadence: quarterly`)
+
+<Warning>
+For `high` and `critical` tiers, `gitagent validate --compliance` will return errors (not just warnings) if `human_in_the_loop` is missing or set to `none`, or if `audit_logging` is not `true`. These failures block CI/CD pipelines.
+</Warning>
+
+## Setting the risk tier
+
+Set `risk_tier` inside the `compliance` section of `agent.yaml`:
+
+```yaml
+compliance:
+  risk_tier: high   # low | standard | high | critical
+  frameworks:
+    - finra
+    - federal_reserve
+```
+
+<Note>
+`risk_tier` is required whenever a `compliance` section is present. The validator will return an error if the section exists but `risk_tier` is not specified.
+</Note>
+
+## Validation behavior by tier
+
+| Check | low | standard | high | critical |
+|-------|-----|----------|------|----------|
+| `risk_tier` present | Required | Required | Required | Required |
+| `human_in_the_loop` (always/conditional) | — | — | Error | Error |
+| `audit_logging: true` | — | Warning | Error | Error |
+| `validation_cadence` quarterly or more frequent | — | — | Warning | Warning |
+| Compliance artifacts directory | — | — | Warning | Warning |
+| `kill_switch: true` | — | — | — | Warning |
+| `immutable: true` | — | — | — | Warning |
+| SOD `enforcement: strict` | — | — | Warning | Warning |
+
+## Compliance artifacts
+
+For `high` and `critical` tiers, GitAgent expects the following files to exist inside a `compliance/` directory at the root of the agent repository. `gitagent audit` reports on their presence; `gitagent validate --compliance` emits warnings if they are absent.
+
+```
+compliance/
+├── risk-assessment.md        # Risk tier justification and approval sign-offs
+├── regulatory-map.yaml       # Capability-to-rule control mappings
+└── validation-schedule.yaml  # Validation cadence, owners, and last-completed dates
+```
+
+### compliance/risk-assessment.md
+
+Documents why the agent is classified at its risk tier, the applicable regulatory frameworks, risk categories (inherent and residual), controls in place, and approval signatures.
+
+### compliance/regulatory-map.yaml
+
+Maps agent capabilities (e.g., `customer_communication`, `credit_decision_support`) to specific regulatory rules and the controls that satisfy each rule. Example:
+
+```yaml
+mappings:
+  - capability: customer_communication
+    rules:
+      - id: finra-2210
+        name: "FINRA Rule 2210 — Communications with the Public"
+        controls:
+          - fair_balanced_check
+          - no_misleading_check
+          - principal_pre_review
+      - id: finra-4511
+        name: "FINRA Rule 4511 — Books and Records"
+        controls:
+          - communication_retention
+          - immutable_audit_trail
+```
+
+### compliance/validation-schedule.yaml
+
+Defines validation types, cadence, owners, and completion dates. Aligned with SR 11-7 validation requirements:
+
+```yaml
+schedule:
+  - type: full_validation
+    cadence: annual
+    last_completed: null
+    owner: model-risk-team
+    sr_11_7_elements:
+      - conceptual_soundness
+      - ongoing_monitoring
+      - outcomes_analysis
+  - type: bias_testing
+    cadence: quarterly
+    last_completed: null
+    owner: fair-lending-team
+  - type: supervisory_review
+    cadence: monthly
+    last_completed: null
+    owner: designated-supervisor
+    finra_rules: [3110, 3120]
+```
+
+<Tip>
+The `full` template (`gitagent init --template full`) scaffolds the `compliance/` directory with starter versions of all three artifact files, populated with placeholder values ready to be filled in.
+</Tip>

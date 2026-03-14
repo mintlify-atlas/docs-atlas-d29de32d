@@ -1,0 +1,397 @@
+---
+title: 'agent.yaml specification'
+description: 'The only file in a gitagent repository with a strict JSON schema. Complete field reference for all required and optional fields.'
+---
+
+`agent.yaml` is the manifest file for a gitagent repository. It is the only file with a strict JSON schema. All other files in the agent structure have schemas for their frontmatter or structure, but only `agent.yaml` hard-enforces its schema during validation.
+
+## Naming convention
+
+All YAML keys in `agent.yaml` use **snake_case**. Agent names, skill names, and tool names use **kebab-case** (lowercase with hyphens). This applies uniformly across all gitagent files.
+
+## Required fields
+
+Three fields are required by the JSON schema:
+
+<ParamField path="name" type="string" required>
+  Agent identifier. Must match the pattern `^[a-z][a-z0-9-]*$` — lowercase letters, digits, and hyphens. No uppercase, no underscores, no leading or trailing hyphens.
+
+  ```yaml
+  name: my-compliance-agent
+  ```
+</ParamField>
+
+<ParamField path="version" type="string" required>
+  Semantic version of the agent. Must match the pattern `^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$`.
+
+  ```yaml
+  version: 1.0.0
+  ```
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  One-line description of the agent. Must be non-empty.
+
+  ```yaml
+  description: Financial compliance analysis agent
+  ```
+</ParamField>
+
+## Recommended fields
+
+<ParamField path="spec_version" type="string">
+  The gitagent specification version this manifest targets. Must match `^\d+\.\d+\.\d+$`. Default: `"0.1.0"`.
+
+  ```yaml
+  spec_version: "0.1.0"
+  ```
+</ParamField>
+
+## Optional fields
+
+<ParamField path="author" type="string">
+  Author name or organization.
+</ParamField>
+
+<ParamField path="license" type="string">
+  SPDX license identifier (e.g., `MIT`, `Apache-2.0`, `proprietary`).
+</ParamField>
+
+<ParamField path="model" type="object">
+  Model preferences. All sub-fields are optional.
+
+  <ParamField path="model.preferred" type="string">
+    Primary model ID (e.g., `claude-opus-4-6`, `gpt-4.1`). Adapters use this when launching the agent.
+  </ParamField>
+
+  <ParamField path="model.fallback" type="string[]">
+    Fallback model IDs in priority order.
+  </ParamField>
+
+  <ParamField path="model.constraints" type="object">
+    Model parameter constraints passed to the LLM.
+
+    | Field | Type | Range | Description |
+    |---|---|---|---|
+    | `temperature` | number | 0–2 | Sampling temperature |
+    | `max_tokens` | integer | ≥1 | Maximum output tokens |
+    | `top_p` | number | 0–1 | Nucleus sampling threshold |
+    | `top_k` | integer | ≥1 | Top-k sampling |
+    | `stop_sequences` | string[] | — | Sequences that stop generation |
+    | `presence_penalty` | number | -2–2 | Presence penalty |
+    | `frequency_penalty` | number | -2–2 | Frequency penalty |
+  </ParamField>
+</ParamField>
+
+<ParamField path="skills" type="string[]">
+  Enabled skill directory names (kebab-case). Each name must exist as a subdirectory in `skills/`.
+
+  ```yaml
+  skills:
+    - code-review
+    - security-audit
+  ```
+</ParamField>
+
+<ParamField path="tools" type="string[]">
+  Enabled tool file names without extension (kebab-case). Each name must exist as `tools/<name>.yaml`.
+
+  ```yaml
+  tools:
+    - search-regulations
+    - generate-report
+  ```
+</ParamField>
+
+<ParamField path="agents" type="object">
+  Sub-agent configuration. Keys are agent names; values are sub-agent config objects.
+
+  <ParamField path="agents.<name>.description" type="string">
+    Human-readable description of this sub-agent's role.
+  </ParamField>
+
+  <ParamField path="agents.<name>.delegation" type="object">
+    <ParamField path="agents.<name>.delegation.mode" type="string">
+      How this sub-agent is invoked: `auto`, `explicit`, or `router`.
+    </ParamField>
+    <ParamField path="agents.<name>.delegation.triggers" type="string[]">
+      Conditions that activate this sub-agent (e.g., `factual_claim_detected`, `confidence_low`).
+    </ParamField>
+  </ParamField>
+
+  ```yaml
+  agents:
+    fact-checker:
+      description: Verifies factual claims against authoritative sources
+      delegation:
+        mode: auto
+        triggers:
+          - factual_claim_detected
+  ```
+</ParamField>
+
+<ParamField path="delegation" type="object">
+  Top-level delegation strategy.
+
+  <ParamField path="delegation.mode" type="string">
+    `auto` — route automatically based on triggers. `explicit` — agent decides. `router` — delegate to a dedicated router agent.
+  </ParamField>
+
+  <ParamField path="delegation.router" type="string">
+    Router agent name when `mode: router`.
+  </ParamField>
+</ParamField>
+
+<ParamField path="runtime" type="object">
+  Execution parameters.
+
+  <ParamField path="runtime.max_turns" type="integer">
+    Maximum conversation turns. Minimum: 1.
+  </ParamField>
+
+  <ParamField path="runtime.temperature" type="number">
+    Runtime temperature override (0.0–2.0).
+  </ParamField>
+
+  <ParamField path="runtime.timeout" type="integer">
+    Timeout in seconds. Minimum: 1.
+  </ParamField>
+</ParamField>
+
+<ParamField path="a2a" type="object">
+  Agent-to-Agent protocol metadata.
+
+  <ParamField path="a2a.url" type="string">
+    A2A endpoint URL (URI format).
+  </ParamField>
+
+  <ParamField path="a2a.capabilities" type="string[]">
+    Declared A2A capabilities.
+  </ParamField>
+
+  <ParamField path="a2a.authentication" type="object">
+    Authentication mechanism. `type` must be one of: `none`, `api_key`, `oauth2`, `mtls`.
+  </ParamField>
+
+  <ParamField path="a2a.protocols" type="string[]">
+    Supported server protocols. Values: `a2a`, `mcp`.
+  </ParamField>
+</ParamField>
+
+<ParamField path="extends" type="string">
+  Parent agent git URL or local path. The child agent inherits the parent's configuration. Resolution rules:
+  - `agent.yaml`: child fields override parent (deep merge)
+  - `SOUL.md`: child replaces parent entirely
+  - `RULES.md`: child rules append to parent rules
+  - `skills/`, `tools/`: union, child shadows parent on name collision
+  - `memory/`: isolated per agent, not inherited
+  - `compliance/`: child inherits parent, can override
+
+  ```yaml
+  extends: https://github.com/org/base-agent.git
+  ```
+</ParamField>
+
+<ParamField path="dependencies" type="object[]">
+  Composed agents with vendor management metadata. Run `gitagent install` to resolve.
+
+  <ParamField path="dependencies[].name" type="string" required>
+    Dependency name (kebab-case).
+  </ParamField>
+
+  <ParamField path="dependencies[].source" type="string" required>
+    Git URL, local path, or registry reference.
+  </ParamField>
+
+  <ParamField path="dependencies[].version" type="string">
+    Semver range (e.g., `^1.0.0`, `~2.3.0`).
+  </ParamField>
+
+  <ParamField path="dependencies[].mount" type="string">
+    Mount path relative to agent root.
+  </ParamField>
+
+  <ParamField path="dependencies[].vendor_management" type="object">
+    Vendor due diligence metadata per SR 23-4.
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `due_diligence_date` | date string | Date of last due diligence review |
+    | `soc_report` | boolean | SOC 2 report obtained |
+    | `risk_assessment` | string | `low`, `medium`, `high`, or `critical` |
+  </ParamField>
+</ParamField>
+
+<ParamField path="compliance" type="object">
+  Regulatory compliance configuration. See the [compliance section](#compliance-section) below.
+</ParamField>
+
+<ParamField path="registries" type="object[]">
+  Skill registry providers for marketplace integration.
+
+  ```yaml
+  registries:
+    - name: skillsmp
+      url: https://api.skillsmp.com
+  ```
+</ParamField>
+
+<ParamField path="tags" type="string[]">
+  Categorization tags. Must be unique.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Arbitrary key-value pairs. Values must be strings, numbers, or booleans.
+
+  ```yaml
+  metadata:
+    department: compliance
+    cost_center: CC-001
+  ```
+</ParamField>
+
+## Compliance section
+
+The `compliance` section configures regulatory adherence for agents operating in regulated environments.
+
+<AccordionGroup>
+  <Accordion title="risk_tier and frameworks">
+    ```yaml
+    compliance:
+      risk_tier: high  # low | standard | high | critical
+      frameworks:
+        - finra
+        - federal_reserve
+        - sec
+        - cfpb
+    ```
+
+    For `risk_tier: high` or `critical`, the schema enforces that `supervision.human_in_the_loop` is `always` or `conditional` and `recordkeeping.audit_logging` is `true`.
+
+    Framework values are extensible — any string is accepted. Standard values: `finra`, `federal_reserve`, `sec`, `cfpb`, `occ`, `fdic`, `bsa_aml`. Non-US examples: `eu_ai_act`, `uk_fca`, `mas_singapore`, `gdpr`.
+  </Accordion>
+  <Accordion title="supervision — FINRA Rule 3110">
+    ```yaml
+    supervision:
+      designated_supervisor: chief-compliance-officer
+      review_cadence: monthly  # daily | weekly | monthly | quarterly | semi_annual | annual
+      human_in_the_loop: always  # always | conditional | advisory | none
+      escalation_triggers:
+        - confidence_below: 0.85
+        - action_type: regulatory_filing
+        - error_detected: true
+      override_capability: true
+      kill_switch: true
+    ```
+
+    Escalation trigger types: `confidence_below` (number 0–1), `action_type` (string), `error_detected` (boolean), `data_classification_above` (string), `token_count_above` (integer), `custom` (string).
+  </Accordion>
+  <Accordion title="recordkeeping — FINRA Rule 4511 / SEC 17a-4">
+    ```yaml
+    recordkeeping:
+      audit_logging: true
+      log_format: structured_json  # structured_json | plaintext
+      retention_period: 7y         # pattern: ^\d+[ymd]$
+      log_contents:
+        - prompts_and_responses
+        - tool_calls
+        - decision_pathways
+        - model_version
+        - timestamps
+      immutable: true
+    ```
+  </Accordion>
+  <Accordion title="model_risk — SR 11-7">
+    ```yaml
+    model_risk:
+      inventory_id: MRM-2024-001
+      validation_cadence: quarterly  # monthly | quarterly | semi_annual | annual
+      validation_type: full          # full | targeted | change_based
+      conceptual_soundness: compliance/risk-assessment.md
+      ongoing_monitoring: true
+      outcomes_analysis: true
+      drift_detection: true
+      parallel_testing: false
+    ```
+  </Accordion>
+  <Accordion title="data_governance — Reg S-P / CFPB">
+    ```yaml
+    data_governance:
+      pii_handling: redact          # redact | encrypt | prohibit | allow
+      data_classification: restricted  # public | internal | confidential | restricted
+      consent_required: true
+      cross_border: false
+      bias_testing: true
+      lda_search: true              # Less Discriminatory Alternative (CFPB 2022-03)
+    ```
+  </Accordion>
+  <Accordion title="communications — FINRA Rule 2210">
+    ```yaml
+    communications:
+      type: institutional  # correspondence | retail | institutional
+      pre_review_required: true
+      fair_balanced: true
+      no_misleading: true
+      disclosures_required: true
+    ```
+  </Accordion>
+  <Accordion title="vendor_management — SR 23-4">
+    ```yaml
+    vendor_management:
+      due_diligence_complete: true
+      soc_report_required: true
+      vendor_ai_notification: true
+      subcontractor_assessment: true
+    ```
+  </Accordion>
+  <Accordion title="segregation_of_duties">
+    ```yaml
+    segregation_of_duties:
+      roles:
+        - id: maker         # snake_case
+          description: Creates proposals and initiates actions
+          permissions: [create, submit]
+        - id: checker
+          description: Reviews and approves maker outputs
+          permissions: [review, approve, reject]
+      conflicts:
+        - [maker, checker]  # maker cannot approve own work
+      assignments:
+        loan-originator: [maker]
+        credit-reviewer: [checker]
+      isolation:
+        state: full          # full | shared | none
+        credentials: separate  # separate | shared
+      handoffs:
+        - action: credit_decision
+          required_roles: [maker, checker]
+          approval_required: true
+      enforcement: strict    # strict | advisory
+    ```
+
+    Validation rules: `roles` requires at least 2 entries with unique IDs. `conflicts` pairs must reference defined role IDs. `assignments` role names must reference defined role IDs. No agent in `assignments` may hold conflicting role pairs. `handoffs.required_roles` must include at least 2 roles.
+  </Accordion>
+</AccordionGroup>
+
+## Minimal example
+
+```yaml
+spec_version: "0.1.0"
+name: my-agent
+version: 0.1.0
+description: A helpful assistant agent
+```
+
+## Full regulated example
+
+See the [full compliance agent example](/examples/full) for a complete `agent.yaml` with every compliance sub-section populated.
+
+## JSON schema
+
+The `agent.yaml` JSON schema is available at `spec/schemas/agent-yaml.schema.json` in the gitagent repository. It uses JSON Schema Draft 2020-12 and is referenced at `https://gitagent.dev/schemas/agent-yaml.schema.json`.
+
+Key schema constraints:
+- `required`: `["name", "version", "description"]`
+- `additionalProperties: false` — no unknown top-level keys are permitted
+- Compliance sub-objects also use `additionalProperties: false`
+- `risk_tier: high` or `critical` enforces supervision and recordkeeping via JSON Schema `if/then`

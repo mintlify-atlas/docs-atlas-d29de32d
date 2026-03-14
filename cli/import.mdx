@@ -1,0 +1,102 @@
+---
+title: 'gitagent import'
+description: 'Import an agent from another framework into gitagent format.'
+sidebarTitle: 'import'
+---
+
+## Synopsis
+
+```bash
+gitagent import --from <format> <path> [options]
+```
+
+## Description
+
+`gitagent import` reads an existing agent definition from another framework and converts it into the gitagent directory structure. The result is a valid gitagent repository with `agent.yaml`, `SOUL.md`, and any other files that can be inferred from the source.
+
+## Options
+
+<ParamField path="--from" type="string" required>
+  Source format. One of `claude`, `cursor`, or `crewai`.
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Path to the source file or directory to import from.
+</ParamField>
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Target directory to write the gitagent files into.
+</ParamField>
+
+## Import sources
+
+### claude
+
+Imports from a Claude Code project directory.
+
+| What it reads | What it creates |
+|---------------|-----------------|
+| `CLAUDE.md` | `agent.yaml`, `SOUL.md`, `RULES.md` |
+| `.claude/skills/` | Imported skill files under `skills/` |
+
+The CLAUDE.md content is parsed to extract identity and rules sections. Each subdirectory under `.claude/skills/` is imported as a gitagent skill.
+
+```bash
+gitagent import --from claude ./my-claude-project
+```
+
+### cursor
+
+Imports from a Cursor project with AI rules.
+
+| What it reads | What it creates |
+|---------------|-----------------|
+| `.cursorrules` or `AGENTS.md` | `agent.yaml`, `SOUL.md`, `AGENTS.md` |
+
+The rules file content is used to populate the agent identity and soul. If both `.cursorrules` and `AGENTS.md` are present, you should point `path` at the specific file you want to use.
+
+```bash
+gitagent import --from cursor ./.cursorrules
+```
+
+### crewai
+
+Imports from a CrewAI YAML configuration file.
+
+| What it reads | What it creates |
+|---------------|-----------------|
+| CrewAI YAML config (`crew.yaml`) | `agent.yaml`, `SOUL.md`, sub-agents in `agents/` |
+
+Each crew member defined in the YAML is mapped to a sub-agent directory. The primary agent's role and goal become the SOUL.md identity.
+
+```bash
+gitagent import --from crewai ./crew.yaml --dir ./imported-agent
+```
+
+## Examples
+
+<CodeGroup>
+
+```bash Import from a Claude Code project
+gitagent import --from claude ./my-claude-project
+```
+
+```bash Import from a Cursor rules file
+gitagent import --from cursor ./.cursorrules
+```
+
+```bash Import from CrewAI into a new directory
+gitagent import --from crewai ./crew.yaml --dir ./imported-agent
+```
+
+</CodeGroup>
+
+<Note>
+  After importing, run `gitagent validate` to check the generated files and `gitagent info` to review what was extracted.
+</Note>
+
+## Related commands
+
+- [export](/cli/export) — Export an agent to another framework format
+- [validate](/cli/validate) — Validate the imported agent repository
+- [init](/cli/init) — Scaffold a fresh agent from a template

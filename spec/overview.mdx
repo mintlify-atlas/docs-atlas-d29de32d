@@ -1,0 +1,79 @@
+---
+title: 'Specification overview'
+description: 'The gitagent specification v0.1.0 — a portable, version-controlled, human-readable format for AI agent definitions.'
+---
+
+The gitagent specification defines a portable, version-controlled, human-readable format for AI agent definitions. An agent is fully described by files in a git repository. Cloning the repository gives you a complete agent.
+
+## Design goals
+
+The specification is designed to be:
+
+- **Framework-agnostic** — works with Claude Code, OpenAI, LangChain, CrewAI, AutoGen, Lyzr, and others. Export to any framework with adapters.
+- **Git-native** — version control, branching, diffing, PRs, and collaboration built in. Every change to your agent is a git commit.
+- **Compliance-ready** — first-class support for FINRA, Federal Reserve, SEC, and CFPB regulatory requirements baked directly into the manifest.
+- **Composable** — agents can extend parent agents, declare dependencies, and delegate to sub-agents.
+
+## Current version
+
+**v0.1.0** — The specification is a living document. The current version is tracked in the `spec_version` field of every `agent.yaml`.
+
+The full specification is available on GitHub: [open-gitagent/gitagent — spec/SPECIFICATION.md](https://github.com/open-gitagent/gitagent/blob/main/spec/SPECIFICATION.md).
+
+## What the spec defines
+
+The specification covers:
+
+- The required and optional files in an agent repository
+- The schema for `agent.yaml` — the only file with a strict schema
+- The format and content requirements for `SOUL.md`
+- The structure of skills, tools, hooks, knowledge, memory, and workflows
+- Compliance configuration fields and their validation rules
+- Sub-agent and inheritance patterns
+- Segregation of duties for multi-agent systems
+
+## JSON schemas
+
+Machine-readable JSON schemas for all file formats are in `spec/schemas/`:
+
+| Schema file | Validates |
+|---|---|
+| `agent-yaml.schema.json` | `agent.yaml` manifest |
+| `skill.schema.json` | SKILL.md frontmatter |
+| `tool.schema.json` | `tools/*.yaml` |
+| `hooks.schema.json` | `hooks/hooks.yaml` |
+| `hook-io.schema.json` | Hook script stdin/stdout protocol |
+| `knowledge.schema.json` | `knowledge/index.yaml` |
+| `memory.schema.json` | `memory/memory.yaml` |
+| `workflow.schema.json` | `workflows/*.yaml` |
+| `marketplace.schema.json` | Marketplace skill metadata |
+| `config.schema.json` | `config/*.yaml` |
+
+## Specification pages
+
+<CardGroup cols={2}>
+  <Card title="agent.yaml" icon="file" href="/spec/agent-yaml">
+    The only file with a strict schema. All fields documented with types and requirements.
+  </Card>
+  <Card title="SOUL.md" icon="heart" href="/spec/soul">
+    Identity, personality, communication style, and values. Required by every agent.
+  </Card>
+  <Card title="Skills schema" icon="puzzle-piece" href="/spec/skills-schema">
+    SKILL.md frontmatter format, directory structure, and discovery rules.
+  </Card>
+  <Card title="Tools schema" icon="wrench" href="/spec/tools-schema">
+    MCP-compatible tool definitions in `tools/*.yaml`.
+  </Card>
+  <Card title="Hooks schema" icon="bolt" href="/spec/hooks-schema">
+    Lifecycle event handlers: `hooks/hooks.yaml` and the hook I/O protocol.
+  </Card>
+  <Card title="Knowledge schema" icon="book" href="/spec/knowledge-schema">
+    Reference document index in `knowledge/index.yaml`.
+  </Card>
+  <Card title="Memory schema" icon="database" href="/spec/memory-schema">
+    Persistent cross-session memory: `MEMORY.md` and `memory.yaml`.
+  </Card>
+  <Card title="Workflows schema" icon="diagram-project" href="/spec/workflows-schema">
+    Multi-step procedure definitions in `workflows/*.yaml` or `*.md`.
+  </Card>
+</CardGroup>

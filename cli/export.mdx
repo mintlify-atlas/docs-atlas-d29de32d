@@ -1,0 +1,169 @@
+---
+title: 'gitagent export'
+description: 'Export an agent definition to another framework format.'
+sidebarTitle: 'export'
+---
+
+## Synopsis
+
+```bash
+gitagent export -f <format> [options]
+```
+
+## Description
+
+`gitagent export` converts an agent directory into the native format for another AI framework or platform. Output is printed to stdout by default, or written to a file with `--output`.
+
+## Options
+
+<ParamField path="-f, --format" type="string" required>
+  Export format. See the [Supported formats](#supported-formats) table below for valid values.
+</ParamField>
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory to export from.
+</ParamField>
+
+<ParamField path="-o, --output" type="string">
+  File path to write the output to. If omitted, output is printed to stdout.
+</ParamField>
+
+## Supported formats
+
+| Format | Output type | Description |
+|--------|-------------|-------------|
+| `system-prompt` | Markdown | Concatenated system prompt for any LLM |
+| `claude-code` | Markdown | Claude Code `CLAUDE.md` file |
+| `openai` | Python | OpenAI Agents SDK source code |
+| `crewai` | YAML | CrewAI crew configuration |
+| `openclaw` | JSON + Markdown | OpenClaw workspace (config + AGENTS.md + skills) |
+| `nanobot` | JSON + Markdown | Nanobot `config.json` + system prompt |
+| `lyzr` | JSON | Lyzr Studio agent creation API payload |
+| `github` | JSON | GitHub Models API chat completions payload |
+
+## Format details
+
+### system-prompt
+
+A single concatenated Markdown document suitable for pasting into any LLM chat interface or API call. Includes (in order):
+
+1. Agent identity header (name + version)
+2. `SOUL.md` content
+3. `RULES.md` content
+4. Skills with instructions and allowed tools
+5. Knowledge documents marked `always_load: true` in `knowledge/index.yaml`
+6. Compliance constraints as behavioral rules
+7. `MEMORY.md` content (if the file has content)
+
+### claude-code
+
+A `CLAUDE.md` file compatible with Claude Code. Contains SOUL.md, RULES.md, skill instructions, model preference (as an HTML comment), compliance constraints, and knowledge document references.
+
+### openai
+
+Python source code for the OpenAI Agents SDK. Generates:
+
+- `from agents import Agent, Tool` imports
+- Python function stubs for each tool defined in `tools/*.yaml`, with docstrings and parameter type mappings
+- `Agent()` instantiation with `name`, `instructions`, `model`, and `tools` list
+
+### crewai
+
+YAML configuration for CrewAI. Parses `SOUL.md` to extract `role`, `goal`, and `backstory`. Includes skill descriptions in the backstory. Maps sub-agents from the `agents/` directory.
+
+### openclaw
+
+OpenClaw workspace format. Returns structured output with:
+
+- `openclaw.json` — model mapping and workspace settings
+- `AGENTS.md` — identity, rules, knowledge references, compliance, sub-agents
+- `SOUL.md` — passed through unchanged
+- Tool definitions as Markdown
+- Skills as separate `SKILL.md` files
+
+### nanobot
+
+Nanobot configuration format. Returns:
+
+- `config.json` — provider config, agent settings, model mapping
+- System prompt — SOUL.md + RULES.md + skills + knowledge + compliance + tools
+
+### lyzr
+
+Lyzr Studio agent creation payload (JSON). Includes:
+
+- `name`, `description` from `agent.yaml`
+- `agent_role` extracted from SOUL.md "Core Identity" section
+- `agent_goal` extracted from SOUL.md "Values/Purpose/Goal" section
+- `agent_instructions` — full system prompt (SOUL + RULES + skills + compliance + memory)
+- `provider_id`, `model`, `temperature`, `top_p`, `llm_credential_id` from model config
+- `features` with memory enabled by default
+
+**Model-to-provider mapping:**
+
+| Model prefix | Lyzr provider | Credential ID |
+|-------------|---------------|---------------|
+| `claude-*` | Anthropic | `lyzr_anthropic` |
+| `gpt-*`, `o1-*`, `o3-*` | OpenAI | `lyzr_openai` |
+| `gemini-*` | Google | `lyzr_google` |
+| *(default)* | OpenAI | `lyzr_openai` |
+
+### github
+
+GitHub Models API payload (OpenAI-compatible chat completions format). Includes:
+
+- `model` namespaced for GitHub Models (e.g. `openai/gpt-4.1`)
+- `messages` with the system prompt from the agent definition
+- `temperature`, `max_tokens` from model constraints
+- `stream: true` — always enabled
+
+**Model namespace mapping:**
+
+| Model prefix | GitHub namespace |
+|-------------|------------------|
+| `gpt-*`, `o1-*`, `o3-*`, `o4-*` | `openai/` |
+| `claude-*` | `anthropic/` |
+| `llama-*`, `Llama-*` | `meta/` |
+| `mistral-*`, `Mistral-*` | `mistralai/` |
+| `gemini-*` | `google/` |
+| `deepseek-*`, `DeepSeek-*` | `deepseek/` |
+
+## Examples
+
+<CodeGroup>
+
+```bash Print system prompt to terminal
+gitagent export --format system-prompt
+```
+
+```bash Save as Claude Code CLAUDE.md
+gitagent export --format claude-code --output CLAUDE.md
+```
+
+```bash Generate OpenAI Python agent code
+gitagent export --format openai --output agent.py
+```
+
+```bash Export CrewAI configuration
+gitagent export --format crewai -d ./examples/standard
+```
+
+```bash Preview Lyzr API payload
+gitagent export --format lyzr -d ./examples/lyzr-agent
+```
+
+```bash Preview GitHub Models payload
+gitagent export --format github -d ./examples/standard
+```
+
+```bash Export Nanobot config from a specific directory
+gitagent export --format nanobot -d ./my-agent -o nanobot-config.json
+```
+
+</CodeGroup>
+
+## Related commands
+
+- [import](/cli/import) — Import an agent from another framework into gitagent format
+- [run](/cli/run) — Run the agent using any supported adapter
+- [lyzr create](/cli/lyzr) — Create an agent on Lyzr Studio directly

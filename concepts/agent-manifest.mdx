@@ -1,0 +1,465 @@
+---
+title: "agent.yaml — The manifest"
+description: "The only file in a gitagent repository with a strict schema. Declares identity, model, capabilities, and compliance."
+---
+
+`agent.yaml` is the single required configuration file with a strict JSON schema. All other files in a gitagent repo have loose or no schemas. `agent.yaml` is the authoritative source for the agent's identity, model preferences, declared capabilities, and compliance configuration.
+
+<Note>
+  All YAML keys use **snake_case**. Agent names, skill names, and tool names use **kebab-case** (lowercase with hyphens, e.g. `code-review-agent`).
+</Note>
+
+## Required fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Agent identifier. Pattern: `^[a-z][a-z0-9-]*$` |
+| `version` | string | Semantic version. Pattern: `^X.Y.Z[-prerelease][+build]$` |
+| `description` | string | One-line description of the agent's purpose |
+
+## Minimal example
+
+```yaml
+spec_version: "0.1.0"
+name: my-agent
+version: 0.1.0
+description: A helpful assistant agent
+```
+
+## Standard example
+
+The standard template produces an agent with model preferences, skills, tools, and runtime configuration:
+
+```yaml
+spec_version: "0.1.0"
+name: code-review-agent
+version: 1.0.0
+description: Automated code review agent with best-practice enforcement
+author: gitagent-examples
+license: MIT
+
+model:
+  preferred: claude-sonnet-4-5-20250929
+  fallback:
+    - claude-haiku-4-5-20251001
+  constraints:
+    temperature: 0.2
+    max_tokens: 4096
+
+skills:
+  - code-review
+
+tools:
+  - lint-check
+  - complexity-analysis
+
+runtime:
+  max_turns: 20
+  timeout: 120
+
+tags:
+  - code-review
+  - developer-tools
+```
+
+## Full example with compliance
+
+A production compliance agent with all sections populated:
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.0.0
+description: Financial compliance analysis agent for FINRA and Federal Reserve regulated environments
+author: gitagent-examples
+license: proprietary
+
+model:
+  preferred: claude-opus-4-6
+  fallback:
+    - claude-sonnet-4-5-20250929
+  constraints:
+    temperature: 0.1
+    max_tokens: 8192
+
+skills:
+  - regulatory-analysis
+  - document-review
+
+tools:
+  - search-regulations
+  - generate-report
+
+agents:
+  fact-checker:
+    description: Verifies factual claims against authoritative sources
+    delegation:
+      mode: auto
+      triggers:
+        - factual_claim_detected
+
+delegation:
+  mode: auto
+
+runtime:
+  max_turns: 50
+  temperature: 0.1
+  timeout: 300
+
+extends: https://github.com/org/base-agent.git
+
+dependencies:
+  - name: fact-checker
+    source: https://github.com/org/fact-checker-agent.git
+    version: ^1.0.0
+    mount: agents/fact-checker
+    vendor_management:
+      due_diligence_date: "2026-01-15"
+      soc_report: true
+      risk_assessment: low
+
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+  supervision:
+    designated_supervisor: chief-compliance-officer
+    review_cadence: monthly
+    human_in_the_loop: always
+    escalation_triggers:
+      - confidence_below: 0.85
+      - action_type: regulatory_filing
+      - error_detected: true
+    override_capability: true
+    kill_switch: true
+  recordkeeping:
+    audit_logging: true
+    log_format: structured_json
+    retention_period: 7y
+    log_contents:
+      - prompts_and_responses
+      - tool_calls
+      - decision_pathways
+      - model_version
+      - timestamps
+    immutable: true
+
+tags:
+  - compliance
+  - financial-services
+metadata:
+  department: compliance
+  cost_center: CC-COMPLIANCE-001
+```
+
+## All top-level fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec_version` | string | Recommended | gitagent spec version (e.g. `"0.1.0"`) |
+| `name` | string | **Yes** | Agent identifier (kebab-case) |
+| `version` | string | **Yes** | Semantic version |
+| `description` | string | **Yes** | One-line description |
+| `author` | string | No | Author name or organization |
+| `license` | string | No | SPDX license identifier |
+| `model` | object | No | Model preferences |
+| `skills` | string[] | No | Enabled skill names (kebab-case) |
+| `tools` | string[] | No | Enabled tool names, without extension (kebab-case) |
+| `agents` | object | No | Sub-agent configuration (keys are agent names) |
+| `delegation` | object | No | Delegation strategy for sub-agents |
+| `runtime` | object | No | Execution parameters |
+| `a2a` | object | No | Agent-to-Agent protocol metadata |
+| `extends` | string | No | Parent agent git URL or local path |
+| `dependencies` | object[] | No | Composed agents with vendor management metadata |
+| `compliance` | object | No | Regulatory compliance configuration |
+| `tags` | string[] | No | Categorization tags |
+| `metadata` | object | No | Arbitrary key-value pairs (string, number, or boolean values) |
+
+## Field reference by section
+
+<AccordionGroup>
+
+<Accordion title="model — Model preferences">
+
+The `model` section declares the agent's preferred model, fallback models, and inference constraints.
+
+```yaml
+model:
+  preferred: claude-opus-4-6
+  fallback:
+    - claude-sonnet-4-5-20250929
+    - claude-haiku-4-5-20251001
+  constraints:
+    temperature: 0.2
+    max_tokens: 4096
+    top_p: 0.9
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `preferred` | string | Primary model ID (e.g. `claude-opus-4-6`, `gpt-4o`) |
+| `fallback` | string[] | Fallback model IDs in priority order |
+| `constraints.temperature` | number | Sampling temperature, 0.0–2.0 |
+| `constraints.max_tokens` | integer | Maximum output tokens |
+| `constraints.top_p` | number | Nucleus sampling probability |
+| `constraints.top_k` | integer | Top-k sampling |
+| `constraints.stop_sequences` | string[] | Stop sequences |
+| `constraints.presence_penalty` | number | Presence penalty |
+| `constraints.frequency_penalty` | number | Frequency penalty |
+
+</Accordion>
+
+<Accordion title="agents — Sub-agent configuration">
+
+The `agents` section declares sub-agents and their delegation behavior. Sub-agent directories must exist under `agents/<name>/`.
+
+```yaml
+agents:
+  fact-checker:
+    description: Verifies factual claims against authoritative sources
+    delegation:
+      mode: auto
+      triggers:
+        - factual_claim_detected
+        - "verify this claim"
+  security-scanner:
+    description: Scans for vulnerabilities
+    delegation:
+      mode: manual
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `<name>.description` | string | What this sub-agent does |
+| `<name>.delegation.mode` | enum | `auto` — triggered automatically; `manual` — called explicitly |
+| `<name>.delegation.triggers` | string[] | Conditions or phrases that trigger automatic delegation |
+
+The top-level `delegation` field sets the default delegation strategy:
+
+```yaml
+delegation:
+  mode: auto       # auto | explicit | router
+  router: my-router-agent  # when mode=router
+```
+
+</Accordion>
+
+<Accordion title="runtime — Execution parameters">
+
+```yaml
+runtime:
+  max_turns: 50
+  temperature: 0.3
+  timeout: 300
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `max_turns` | integer | Maximum conversation turns |
+| `temperature` | number | Runtime temperature override (0.0–2.0) |
+| `timeout` | integer | Execution timeout in seconds |
+
+</Accordion>
+
+<Accordion title="a2a — Agent-to-Agent protocol">
+
+The `a2a` section exposes the agent as an A2A-compatible endpoint.
+
+```yaml
+a2a:
+  url: https://api.example.com/agent
+  capabilities:
+    - code-review
+    - compliance-check
+  authentication:
+    type: bearer
+    required: true
+  protocols:
+    - a2a-v1
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | string | Agent endpoint URL |
+| `capabilities` | string[] | Advertised capability identifiers |
+| `authentication.type` | string | Auth type (e.g. `bearer`) |
+| `authentication.required` | boolean | Whether authentication is required |
+| `protocols` | string[] | Supported A2A protocol versions |
+
+</Accordion>
+
+<Accordion title="extends and dependencies — Inheritance">
+
+Single inheritance via `extends`, composition via `dependencies`.
+
+```yaml
+extends: https://github.com/org/base-agent.git
+
+dependencies:
+  - name: fact-checker
+    source: https://github.com/org/fact-checker-agent.git
+    version: ^1.0.0
+    mount: agents/fact-checker
+    vendor_management:
+      due_diligence_date: "2026-01-15"
+      soc_report: true
+      risk_assessment: low
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `extends` | string | Parent agent git URL or local path |
+| `dependencies[].name` | string | Dependency identifier |
+| `dependencies[].source` | string | Git URL or local path |
+| `dependencies[].version` | string | Semantic version constraint |
+| `dependencies[].mount` | string | Directory to mount the dependency into |
+| `dependencies[].vendor_management.due_diligence_date` | string | Date DD was completed (ISO 8601) |
+| `dependencies[].vendor_management.soc_report` | boolean | SOC 2 report on file |
+| `dependencies[].vendor_management.risk_assessment` | string | Risk level: `low`, `medium`, `high` |
+
+Run `gitagent install` to clone and mount all declared dependencies.
+
+</Accordion>
+
+<Accordion title="compliance — Regulatory configuration">
+
+The `compliance` section is for agents operating in regulated environments. When present, `risk_tier` is required.
+
+```yaml
+compliance:
+  risk_tier: high          # low | standard | high | critical
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+```
+
+**Risk tiers:**
+
+| Tier | Requirements |
+|------|--------------|
+| `low` | Minimal — standard logging |
+| `standard` | Audit logging recommended |
+| `high` | Human-in-the-loop required, audit logging required, compliance artifacts required |
+| `critical` | All of `high` + kill switch, immutable logs, quarterly validation |
+
+**Supervision (`compliance.supervision`):**
+
+```yaml
+supervision:
+  designated_supervisor: chief-compliance-officer
+  review_cadence: monthly
+  human_in_the_loop: always   # always | conditional | advisory | none
+  escalation_triggers:
+    - confidence_below: 0.85
+    - action_type: regulatory_filing
+    - error_detected: true
+  override_capability: true
+  kill_switch: true
+```
+
+**Recordkeeping (`compliance.recordkeeping`):**
+
+```yaml
+recordkeeping:
+  audit_logging: true
+  log_format: structured_json   # structured_json | plaintext
+  retention_period: 7y
+  log_contents:
+    - prompts_and_responses
+    - tool_calls
+    - decision_pathways
+    - model_version
+    - timestamps
+  immutable: true
+```
+
+**Model risk (`compliance.model_risk`):**
+
+```yaml
+model_risk:
+  inventory_id: MRM-2026-0047
+  validation_cadence: quarterly   # annual | quarterly | monthly
+  validation_type: full           # full | targeted | change_based
+  ongoing_monitoring: true
+  outcomes_analysis: true
+  drift_detection: true
+```
+
+**Data governance (`compliance.data_governance`):**
+
+```yaml
+data_governance:
+  pii_handling: redact       # redact | encrypt | prohibit | allow
+  data_classification: restricted
+  consent_required: true
+  cross_border: false
+  bias_testing: true
+  lda_search: true
+```
+
+**Communications (`compliance.communications`):**
+
+```yaml
+communications:
+  type: institutional     # correspondence | retail | institutional
+  pre_review_required: true
+  fair_balanced: true
+  no_misleading: true
+  disclosures_required: true
+```
+
+**Vendor management (`compliance.vendor_management`):**
+
+```yaml
+vendor_management:
+  due_diligence_complete: true
+  soc_report_required: true
+  vendor_ai_notification: true
+  subcontractor_assessment: true
+```
+
+**Segregation of duties (`compliance.segregation_of_duties`):**
+
+```yaml
+segregation_of_duties:
+  roles:
+    - id: analyst
+      description: Performs regulatory analysis
+      permissions: [create, submit]
+    - id: reviewer
+      description: Reviews analysis for accuracy
+      permissions: [review, approve, reject]
+  conflicts:
+    - [analyst, reviewer]    # analyst cannot approve own work
+  assignments:
+    compliance-analyst: [analyst]
+    fact-checker: [reviewer]
+  isolation:
+    state: full
+    credentials: separate
+  handoffs:
+    - action: regulatory_filing
+      required_roles: [analyst, reviewer]
+      approval_required: true
+  enforcement: strict   # strict | advisory
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## Validation
+
+Run `gitagent validate` to validate `agent.yaml` against the JSON schema and verify all referenced skills, tools, and sub-agents exist. Add `--compliance` to also check regulatory requirements.
+
+```bash
+gitagent validate
+gitagent validate --compliance
+```
+
+JSON schemas for all gitagent files are located in `spec/schemas/` in the repository. The agent manifest schema is `spec/schemas/agent-yaml.schema.json`.

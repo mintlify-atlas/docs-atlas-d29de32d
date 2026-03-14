@@ -1,0 +1,84 @@
+---
+title: 'Adapters overview'
+description: 'Understand the difference between adapters and runners, and choose the right one for your agent.'
+---
+
+gitagent separates concerns into two layers: **adapters** that transform your agent definition into another framework's format, and **runners** that execute the transformed agent using that framework's CLI or API.
+
+## Adapters vs runners
+
+**Adapters** are pure export transformers. They read your agent directory — `agent.yaml`, `SOUL.md`, `RULES.md`, skills, tools, knowledge, and compliance config — and produce output in the target framework's native format. You can use an adapter standalone with `gitagent export` to inspect or save the output without running anything.
+
+**Runners** are execution engines. Each runner calls its corresponding adapter, writes the output to a temporary location, then spawns the target framework's CLI or calls its API. Runners are invoked automatically when you use `gitagent run -a <adapter>`.
+
+```bash
+# Use an adapter to export (no execution)
+gitagent export --format claude-code --output CLAUDE.md
+gitagent export --format openai --output agent.py
+gitagent export --format lyzr -d ./my-agent
+
+# Use a runner to export + execute in one step
+gitagent run -d ./my-agent -a claude
+gitagent run -d ./my-agent -a openai
+gitagent run -d ./my-agent -a lyzr -p "Hello"
+```
+
+## All adapters
+
+| Adapter | Output format | Mode | Requirements |
+|---------|--------------|------|--------------|
+| `claude` | CLAUDE.md (Markdown) | Interactive / one-shot | Claude Code CLI (`@anthropic-ai/claude-code`) |
+| `openai` | Python (OpenAI Agents SDK) | One-shot | Python 3, `openai-agents`, `OPENAI_API_KEY` |
+| `crewai` | YAML (CrewAI config) | One-shot | `crewai` CLI (`pip install crewai`) |
+| `openclaw` | JSON + Markdown (workspace) | One-shot (`-p` required) | OpenClaw CLI, `ANTHROPIC_API_KEY` |
+| `nanobot` | JSON + Markdown (`config.json` + system prompt) | Interactive / one-shot | Nanobot (`pip install nanobot-ai`), `ANTHROPIC_API_KEY` |
+| `lyzr` | JSON (Lyzr Studio API payload) | One-shot (`-p` required) | `LYZR_API_KEY` |
+| `github` | JSON (GitHub Models chat completions payload) | One-shot (`-p` required) | `GITHUB_TOKEN` with `models:read` scope |
+| `git` | Auto-detected | Depends on detected adapter | Depends on detected adapter |
+
+## When to use each adapter
+
+**`claude`** — Default choice. Best for interactive development sessions where you want full tool use, sub-agent delegation, and hook support. Uses Claude Code as the execution environment.
+
+**`openai`** — Use when your workflow requires the OpenAI Agents SDK, your model preference is a GPT or O-series model, or your team is already standardized on OpenAI tooling.
+
+**`crewai`** — Use for multi-agent crew orchestration. Maps your SOUL.md identity and sub-agents into CrewAI's role/goal/backstory structure.
+
+**`openclaw`** — Use when you want a local, ephemeral OpenClaw agent session. Auth is auto-provisioned from `ANTHROPIC_API_KEY`. Good for one-shot analysis tasks.
+
+**`nanobot`** — Use for both interactive and one-shot sessions backed by Anthropic models. Auth is auto-provisioned. Supports `--message` for scripted workflows.
+
+**`lyzr`** — Use to deploy your agent to Lyzr Studio and query it over the cloud API. The agent is created once and reused via `.lyzr_agent_id`.
+
+**`github`** — Use when you have a `GITHUB_TOKEN` and want to run any GitHub-hosted model without managing separate API keys. Always streams output to stdout.
+
+**`git`** — Use when cloning an unknown repo and want gitagent to pick the best adapter automatically from signals in the repository.
+
+## Adapter pages
+
+<CardGroup cols={2}>
+  <Card title="Claude Code" icon="code" href="/adapters/claude-code">
+    Generates CLAUDE.md and runs Claude Code CLI with full tool, hook, and sub-agent support.
+  </Card>
+  <Card title="OpenAI" icon="circle-play" href="/adapters/openai">
+    Generates Python code for the OpenAI Agents SDK and executes it with python3.
+  </Card>
+  <Card title="CrewAI" icon="users" href="/adapters/crewai">
+    Exports a CrewAI YAML config parsed from SOUL.md and runs crewai kickoff.
+  </Card>
+  <Card title="OpenClaw" icon="claw-mark" href="/adapters/openclaw">
+    Builds an OpenClaw workspace and runs a local agent session.
+  </Card>
+  <Card title="Nanobot" icon="robot" href="/adapters/nanobot">
+    Writes a Nanobot config.json and system prompt, supports interactive and one-shot modes.
+  </Card>
+  <Card title="Lyzr" icon="cloud" href="/adapters/lyzr">
+    Creates or reuses a Lyzr Studio agent and sends prompts via the inference API.
+  </Card>
+  <Card title="GitHub Models" icon="github" href="/adapters/github">
+    Sends streaming chat completions to the GitHub Models API.
+  </Card>
+  <Card title="Git auto-detect" icon="git-branch" href="/adapters/git-auto-detect">
+    Clones a repo and detects the best adapter from nine priority signals.
+  </Card>
+</CardGroup>

@@ -1,0 +1,106 @@
+---
+title: 'Git auto-detect runner'
+description: 'Clone a git repository and automatically detect the best adapter from signals in the agent definition.'
+---
+
+The `git` runner is a meta-runner that clones a repository and inspects it to choose the most appropriate adapter. It then delegates to that adapter's runner, so you get the right execution environment without specifying it manually.
+
+```bash
+gitagent run -a git -r https://github.com/user/my-agent -p "Hello"
+```
+
+## How it works
+
+<Steps>
+  <Step title="Clone or resolve from cache">
+    The repo is cloned (or loaded from `~/.gitagent/cache/`) using the git caching layer. Use `--branch` to target a specific ref, `--refresh` to pull the latest, or `--no-cache` to clone to a temp directory and delete it on exit.
+  </Step>
+  <Step title="Validate agent.yaml">
+    Verifies that the cloned directory contains `agent.yaml`. Exits with an error if not found.
+  </Step>
+  <Step title="Auto-detect adapter">
+    Runs the detection logic (see priority table below) to pick the best adapter.
+  </Step>
+  <Step title="Delegate to adapter runner">
+    Calls the selected adapter's runner with the agent directory and options, including the prompt if `-p` was given.
+  </Step>
+  <Step title="Clean up">
+    If `--no-cache` was used, the temp clone is deleted after the run.
+  </Step>
+</Steps>
+
+## Auto-detection priority
+
+The runner checks signals in this exact order, stopping at the first match:
+
+| Priority | Signal | Detected adapter |
+|----------|--------|------------------|
+| 1 | `.gitagent_adapter` file exists and is non-empty | Value in the file (e.g. `lyzr`, `github`) |
+| 2 | `model.preferred` starts with `claude` | `claude` |
+| 3 | `model.preferred` starts with `gpt`, `o1`, or `o3` | `openai` |
+| 4 | `CLAUDE.md` or `.claude/` directory exists | `claude` |
+| 5 | `.cursorrules` file exists | `openai` |
+| 6 | `crew.yaml` or `crewai.yaml` file exists | `crewai` |
+| 7 | `.lyzr_agent_id` file exists | `lyzr` |
+| 8 | `.github_models` file exists | `github` |
+| 9 | *(no signal matched)* | `claude` (default) |
+
+<Note>
+You can pin the adapter for any repo by adding a `.gitagent_adapter` file containing the adapter name (e.g., `lyzr`). This is checked first and overrides all other signals.
+</Note>
+
+## Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-r, --repo <url>` | *(required)* | Git repository URL to clone |
+| `-b, --branch <branch>` | `main` | Branch or tag to check out |
+| `--refresh` | `false` | Pull latest into existing cache |
+| `--no-cache` | `false` | Clone to temp directory; delete on exit |
+| `-p, --prompt <message>` | — | Prompt passed to the detected adapter's runner |
+
+## Examples
+
+```bash
+# Basic: clone + auto-detect + run
+gitagent run -a git -r https://github.com/user/my-agent -p "Hello"
+
+# Target a specific branch
+gitagent run -a git -r https://github.com/user/my-agent -b develop -p "Hello"
+
+# Force refresh of the cached clone
+gitagent run -a git -r https://github.com/user/my-agent --refresh -p "Hello"
+
+# Use a temp clone (no cache)
+gitagent run -a git -r https://github.com/user/my-agent --no-cache -p "Hello"
+
+# Repo with a Lyzr agent (auto-detected via .gitagent_adapter or .lyzr_agent_id)
+gitagent run -a git -r https://github.com/user/lyzr-agent -p "Summarize AI trends"
+
+# Repo that has CLAUDE.md (auto-detected as claude adapter)
+gitagent run -a git -r https://github.com/user/claude-agent
+```
+
+## Pinning a repo's adapter
+
+To ensure a specific adapter is always used when someone clones and runs your repo, add a `.gitagent_adapter` file:
+
+```bash
+echo "lyzr" > .gitagent_adapter
+echo "github" > .gitagent_adapter
+echo "nanobot" > .gitagent_adapter
+```
+
+This is the highest-priority signal and takes precedence over all model-name and file-presence checks.
+
+## Cache behavior
+
+Cloned repos are cached at `~/.gitagent/cache/<hash>/` where the hash is the first 16 characters of the SHA-256 of `{url}#{branch}`. This means:
+
+- The same repo + branch always resolves to the same cache directory
+- `--refresh` pulls the latest commits into the existing cache
+- `--no-cache` bypasses the cache entirely and cleans up on exit
+
+<Tip>
+Use `--no-cache` in CI pipelines or when you need a guaranteed fresh clone without polluting the local cache.
+</Tip>

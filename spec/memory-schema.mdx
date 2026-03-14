@@ -1,0 +1,139 @@
+---
+title: 'Memory schema'
+description: 'Persistent cross-session memory: MEMORY.md working memory, memory.yaml configuration, and the archive directory.'
+---
+
+The `memory/` directory provides persistent cross-session state. Agents write knowledge gained during a session to `MEMORY.md`, which carries forward into future sessions as working memory.
+
+## Directory structure
+
+```
+memory/
+├── MEMORY.md       # Working memory (max 200 lines)
+├── memory.yaml     # Memory configuration
+└── archive/        # Historical snapshots
+```
+
+## MEMORY.md
+
+`MEMORY.md` is the agent's working memory file. It holds knowledge the agent has accumulated across sessions — key decisions, context, observations, and facts worth remembering.
+
+**Constraints:**
+- Maximum 200 lines
+- Free-form Markdown format
+- Git-tracked (changes are committed with the agent)
+- Updated at session end or on explicit save
+
+**Example content:**
+
+```markdown
+# Working Memory
+
+## Last Updated
+2026-03-10
+
+## Key Decisions
+- Decided to use quarterly validation cadence (per SR 11-7 requirement for high-risk tier)
+- Designated chief-compliance-officer as supervisor per FINRA 3110
+
+## Context
+- Currently processing Q1 2026 regulatory filings
+- Vendor due diligence for fact-checker completed 2026-01-15
+
+## Open Items
+- Auditor role assignment pending model risk team approval
+```
+
+## memory.yaml
+
+`memory.yaml` configures how memory layers are managed, when they are updated, and archive rotation policy.
+
+```yaml
+layers:
+  - name: working
+    path: MEMORY.md
+    max_lines: 200
+    format: markdown
+  - name: archive
+    path: archive/
+    format: yaml
+    rotation: monthly
+update_triggers:
+  - on_session_end
+  - on_explicit_save
+archive_policy:
+  max_entries: 1000
+  compress_after: 90d
+```
+
+## memory.yaml fields
+
+<ParamField path="layers" type="object[]">
+  Memory layer definitions. Each layer is a named storage target.
+
+  <ParamField path="layers[].name" type="string" required>
+    Layer identifier (e.g., `working`, `archive`).
+  </ParamField>
+
+  <ParamField path="layers[].path" type="string" required>
+    File or directory path relative to `memory/`.
+  </ParamField>
+
+  <ParamField path="layers[].max_lines" type="integer">
+    Maximum lines for file-based layers. Minimum: 1.
+  </ParamField>
+
+  <ParamField path="layers[].format" type="string">
+    Content format: `markdown`, `yaml`, or `json`. Default: `markdown`.
+  </ParamField>
+
+  <ParamField path="layers[].rotation" type="string">
+    Rotation schedule for directory-based layers: `daily`, `weekly`, `monthly`, `quarterly`, or `yearly`.
+  </ParamField>
+</ParamField>
+
+<ParamField path="update_triggers" type="string[]">
+  When to update memory. Valid values: `on_session_end`, `on_explicit_save`, `on_milestone`, `periodic`.
+</ParamField>
+
+<ParamField path="archive_policy" type="object">
+  Archive management settings.
+
+  <ParamField path="archive_policy.max_entries" type="integer">
+    Maximum archive entries before rotation. Minimum: 1.
+  </ParamField>
+
+  <ParamField path="archive_policy.compress_after" type="string">
+    Compress entries older than this period. Pattern: `^\d+[dmy]$` (e.g., `90d`, `6m`, `1y`).
+  </ParamField>
+
+  <ParamField path="archive_policy.retention_period" type="string">
+    Delete entries older than this period. Same pattern as `compress_after`.
+  </ParamField>
+</ParamField>
+
+## How memory is exported to system prompts
+
+Adapters that produce system prompts include `MEMORY.md` content when it has meaningful content:
+
+| Adapter | Behavior |
+|---|---|
+| `system-prompt` | `MEMORY.md` content appended as a "Working Memory" section |
+| `claude-code` | Included in `CLAUDE.md` |
+| `lyzr` | Appended to `agent_instructions` |
+
+## archive/
+
+The `archive/` directory stores historical memory snapshots. Archives are written when `MEMORY.md` reaches its maximum size or on the configured rotation schedule. Archived content is not included in system prompts by default but is available for the agent to reference when needed.
+
+<Note>
+  Memory is isolated per agent and is not inherited when using the `extends` field. Each agent maintains its own independent memory.
+</Note>
+
+## JSON schema
+
+The memory configuration schema is at `spec/schemas/memory.schema.json`, referenced at `https://gitagent.dev/schemas/memory.schema.json`.
+
+- All fields are optional at the top level
+- `layers[].name` and `layers[].path` are required within each layer entry
+- `archive_policy.compress_after` and `retention_period` must match `^\d+[dmy]$`

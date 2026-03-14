@@ -1,122 +1,132 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "GitAgent",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#7c7c7c",
+    "light": "#060606",
+    "dark": "#dedede"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/favicon.png",
+  "logo": {
+    "light": "/favicon.png",
+    "dark": "/favicon.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/open-gitagent/gitagent"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/open-gitagent/gitagent"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/overview",
+              "concepts/agent-structure",
+              "concepts/agent-manifest",
+              "concepts/skills",
+              "concepts/composition"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Patterns",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "patterns/human-in-the-loop",
+              "patterns/live-memory",
+              "patterns/agent-versioning",
+              "patterns/cicd",
+              "patterns/branching"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "CLI Reference",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "cli/init",
+              "cli/validate",
+              "cli/info",
+              "cli/export",
+              "cli/import",
+              "cli/install",
+              "cli/run",
+              "cli/audit",
+              "cli/skills",
+              "cli/lyzr"
+            ]
+          },
+          {
+            "group": "Adapters & Runners",
+            "pages": [
+              "adapters/overview",
+              "adapters/claude-code",
+              "adapters/openai",
+              "adapters/crewai",
+              "adapters/openclaw",
+              "adapters/nanobot",
+              "adapters/lyzr",
+              "adapters/github",
+              "adapters/git-auto-detect"
+            ]
+          },
+          {
+            "group": "Compliance",
+            "pages": [
+              "compliance/overview",
+              "compliance/risk-tiers",
+              "compliance/finra",
+              "compliance/federal-reserve",
+              "compliance/sec-cfpb",
+              "compliance/segregation-of-duties",
+              "compliance/audit"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/minimal",
+              "examples/standard",
+              "examples/full",
+              "examples/lyzr-agent"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Specification",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Spec",
             "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "spec/overview",
+              "spec/agent-yaml",
+              "spec/soul",
+              "spec/skills-schema",
+              "spec/tools-schema",
+              "spec/hooks-schema",
+              "spec/knowledge-schema",
+              "spec/memory-schema",
+              "spec/workflows-schema"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

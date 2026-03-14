@@ -1,0 +1,191 @@
+---
+title: 'Tools schema'
+description: 'MCP-compatible tool definitions in tools/*.yaml. Complete field reference for the tool JSON schema.'
+---
+
+Tools are MCP-compatible capability definitions stored as YAML files in the `tools/` directory. Each tool declares its name, description, input/output schemas, and optional implementation details.
+
+## File format
+
+Tool files are named `<tool-name>.yaml` (kebab-case) and live in the `tools/` directory:
+
+```
+tools/
+├── search-regulations.yaml
+├── search-regulations.py   # Optional implementation file
+├── lint-check.yaml
+└── lint-check.sh           # Optional implementation file
+```
+
+The YAML file and the implementation file (`.py`, `.sh`, `.js`, etc.) can coexist in the same `tools/` directory. The `implementation.path` field in the YAML references the implementation file.
+
+## Required fields
+
+<ParamField path="name" type="string" required>
+  Tool identifier. Must match the pattern `^[a-z][a-z0-9-]*$` — lowercase with hyphens.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Human-readable description of what the tool does. Used by the agent and by the OpenAI adapter when generating Python code.
+</ParamField>
+
+<ParamField path="input_schema" type="object" required>
+  JSON Schema describing the tool's input parameters. Must have `type: object` and a `properties` map.
+
+  ```yaml
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: Search query
+      framework:
+        type: string
+        enum: [finra, sec, federal_reserve, cfpb]
+    required: [query]
+  ```
+</ParamField>
+
+## Optional fields
+
+<ParamField path="version" type="string">
+  Semantic version of the tool definition.
+</ParamField>
+
+<ParamField path="output_schema" type="object">
+  JSON Schema describing the tool's output format. Recommended for MCP compliance.
+
+  ```yaml
+  output_schema:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          type: object
+          properties:
+            title: { type: string }
+            citation: { type: string }
+  ```
+</ParamField>
+
+<ParamField path="implementation" type="object">
+  How the tool is executed. The `type` field is required within this object.
+
+  <ParamField path="implementation.type" type="string" required>
+    Execution mechanism: `script`, `mcp_server`, or `http`.
+  </ParamField>
+
+  <ParamField path="implementation.path" type="string">
+    Path to the implementation script, relative to `tools/`. Required when `type: script`.
+  </ParamField>
+
+  <ParamField path="implementation.runtime" type="string">
+    Script runtime: `node`, `python3`, `bash`, `deno`, `ruby`, or `go`. Required when `type: script`.
+  </ParamField>
+
+  <ParamField path="implementation.url" type="string">
+    HTTP endpoint or MCP server URL. Required when `type: http` or `type: mcp_server`.
+  </ParamField>
+
+  <ParamField path="implementation.method" type="string">
+    HTTP method (`GET`, `POST`, `PUT`, `DELETE`). Required when `type: http`.
+  </ParamField>
+
+  <ParamField path="implementation.headers" type="object">
+    HTTP headers as key-value strings. Used when `type: http`.
+  </ParamField>
+
+  <ParamField path="implementation.timeout" type="integer">
+    Timeout in seconds. Minimum: 1.
+  </ParamField>
+</ParamField>
+
+<ParamField path="annotations" type="object">
+  Tool metadata for runtime behavior.
+
+  | Field | Type | Default | Description |
+  |---|---|---|---|
+  | `requires_confirmation` | boolean | `false` | Requires user confirmation before execution |
+  | `read_only` | boolean | `false` | Tool only reads data, no side effects |
+  | `cost` | string | — | Estimated cost: `none`, `low`, `medium`, `high` |
+  | `compliance_sensitive` | boolean | `false` | Tool interacts with regulated data or systems |
+  | `idempotent` | boolean | `false` | Tool can be safely retried without side effects |
+</ParamField>
+
+## Complete example
+
+```yaml
+name: search-regulations
+description: Search FINRA and SEC regulatory databases
+version: 1.0.0
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: Search query
+    framework:
+      type: string
+      enum: [finra, sec, federal_reserve, cfpb]
+    date_range:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+  required: [query]
+output_schema:
+  type: object
+  properties:
+    results:
+      type: array
+      items:
+        type: object
+        properties:
+          title: { type: string }
+          citation: { type: string }
+          excerpt: { type: string }
+          url: { type: string }
+implementation:
+  type: script
+  path: search-regulations.py
+  runtime: python3
+  timeout: 30
+annotations:
+  requires_confirmation: false
+  read_only: true
+  cost: low
+  compliance_sensitive: true
+```
+
+## Enabling tools in agent.yaml
+
+List tool names (without extension) in the `tools` array in `agent.yaml`:
+
+```yaml
+tools:
+  - search-regulations
+  - generate-report
+```
+
+Each name must correspond to a `tools/<name>.yaml` file.
+
+## How adapters use tools
+
+| Adapter | How tools are used |
+|---|---|
+| `system-prompt` | Tool names listed in the system prompt |
+| `claude-code` | `allowed-tools` list in `CLAUDE.md` |
+| `openai` | Python function stubs generated from `input_schema`, with docstrings from `description` |
+| `crewai` | Tool descriptions included in backstory |
+
+## JSON schema
+
+The tool definition schema is at `spec/schemas/tool.schema.json`, referenced at `https://gitagent.dev/schemas/tool.schema.json`.
+
+- `required`: `["name", "description", "input_schema"]`
+- `additionalProperties: false`
+- `input_schema.type` must be `"object"` (const)
+- When `implementation.type: script`, `path` and `runtime` are required
+- When `implementation.type: http`, `url` and `method` are required
+- When `implementation.type: mcp_server`, `url` is required

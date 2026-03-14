@@ -1,0 +1,212 @@
+---
+title: "Audit reports"
+description: "The `gitagent audit` command generates a section-by-section compliance checklist with pass/fail/warning indicators for every regulatory requirement."
+---
+
+The `gitagent audit` command produces a comprehensive compliance audit report for your agent, covering all nine regulatory areas. It reads your `agent.yaml` and the on-disk compliance artifacts and emits structured pass/fail/warning results for each check.
+
+```bash
+# Audit the agent in the current directory
+gitagent audit
+
+# Audit a specific agent directory
+gitagent audit -d ./examples/full
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-d, --dir <dir>` | `.` | Agent directory to audit |
+
+<Note>
+`gitagent audit` is informational — it does not exit with a non-zero status on failures. For CI/CD gating, use `gitagent validate --compliance`, which does exit non-zero on errors.
+</Note>
+
+## Report structure
+
+The report is divided into ten sections. Each check displays a pass indicator (✓), a warning indicator (~), or a failure indicator (✗).
+
+### 1. Risk Classification
+
+Displays the agent's `risk_tier` and the list of applicable `frameworks`.
+
+```
+1. Risk Classification
+  Risk Tier:  HIGH
+  Frameworks: finra, federal_reserve, sec, cfpb
+```
+
+### 2. Supervision (FINRA Rule 3110)
+
+Checks the `compliance.supervision` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| Designated supervisor assigned | `supervision.designated_supervisor` is set |
+| Review cadence defined | `supervision.review_cadence` is set |
+| Human-in-the-loop configured | `supervision.human_in_the_loop` is not `none` or absent |
+| Escalation triggers defined | `supervision.escalation_triggers` is non-empty |
+| Override capability enabled | `supervision.override_capability: true` |
+| Kill switch enabled | `supervision.kill_switch: true` |
+| HITL is `always` or `conditional` (high/critical) | Required for `high` and `critical` risk tiers |
+
+### 3. Recordkeeping (FINRA Rule 4511 / SEC 17a-4)
+
+Checks the `compliance.recordkeeping` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| Audit logging enabled | `recordkeeping.audit_logging: true` |
+| Log format specified | `recordkeeping.log_format` is set |
+| Retention period defined | `recordkeeping.retention_period` is set |
+| Prompt/response logging | `prompts_and_responses` in `log_contents` |
+| Tool call logging | `tool_calls` in `log_contents` |
+| Decision pathway logging | `decision_pathways` in `log_contents` |
+| Model version tracking | `model_version` in `log_contents` |
+| Timestamp logging | `timestamps` in `log_contents` |
+| Immutable logs | `recordkeeping.immutable: true` |
+
+Additionally, the audit checks retention against regulatory minimums:
+- FINRA 4511: warns if retention is below 6 years
+- SEC 17a-4: warns if retention is below 3 years
+
+### 4. Model Risk Management (SR 11-7)
+
+Checks the `compliance.model_risk` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| Model inventory ID assigned | `model_risk.inventory_id` is set |
+| Validation cadence defined | `model_risk.validation_cadence` is set |
+| Validation type specified | `model_risk.validation_type` is set |
+| Conceptual soundness documented | `model_risk.conceptual_soundness` is set |
+| Ongoing monitoring enabled | `model_risk.ongoing_monitoring: true` |
+| Outcomes analysis enabled | `model_risk.outcomes_analysis: true` |
+| Drift detection enabled | `model_risk.drift_detection: true` |
+
+If `model_risk` is absent and `federal_reserve` is in frameworks, a required error is emitted.
+
+### 5. Data Governance (Reg S-P, CFPB)
+
+Checks the `compliance.data_governance` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| PII handling policy defined | `data_governance.pii_handling` is set |
+| PII handling is restrictive | `pii_handling` is not `allow` |
+| Data classification set | `data_governance.data_classification` is set |
+| Consent requirement configured | `data_governance.consent_required` is defined |
+| Cross-border assessment done | `data_governance.cross_border` is defined |
+| Bias testing enabled | `data_governance.bias_testing: true` |
+| LDA search configured | `data_governance.lda_search` is defined |
+
+### 6. Communications Compliance (FINRA Rule 2210)
+
+Checks the `compliance.communications` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| Communication type classified | `communications.type` is set |
+| Fair and balanced enforced | `communications.fair_balanced: true` |
+| No misleading enforced | `communications.no_misleading: true` |
+| Pre-review requirement assessed | `communications.pre_review_required` is defined |
+| Disclosure requirements assessed | `communications.disclosures_required` is defined |
+
+Additional warning: if `type: retail` and `pre_review_required` is not set, a warning is emitted citing FINRA 2210(b)(1).
+
+### 7. Vendor Management (SR 23-4)
+
+Checks the `compliance.vendor_management` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| Due diligence complete | `vendor_management.due_diligence_complete: true` |
+| SOC report requirement assessed | `vendor_management.soc_report_required` is defined |
+| Vendor AI notification required | `vendor_management.vendor_ai_notification: true` |
+| Subcontractor assessment done | `vendor_management.subcontractor_assessment: true` |
+
+If `vendor_management` is absent but `dependencies` exist, a warning is emitted.
+If there are no dependencies, the report notes that vendor management is not required.
+
+### 8. Segregation of Duties
+
+Checks the `compliance.segregation_of_duties` section:
+
+| Check | What it verifies |
+|-------|------------------|
+| Roles defined (≥2) | At least two roles defined |
+| Conflict matrix defined | At least one conflict pair |
+| Role assignments configured | At least one assignment |
+| State isolation configured | `isolation.state` is set |
+| State isolation is full | `isolation.state: full` |
+| Credential segregation configured | `isolation.credentials` is set |
+| Credentials are separate | `isolation.credentials: separate` |
+| Handoff workflows defined | At least one handoff |
+| Enforcement is strict | `enforcement: strict` |
+
+The report also prints the full role assignment table, the conflict rules, and explicitly flags any SOD violations detected in the current assignments.
+
+### 9. Compliance Artifacts
+
+Checks for the presence of required compliance files:
+
+| Check | File |
+|-------|------|
+| `compliance/` directory exists | `compliance/` |
+| `regulatory-map.yaml` exists | `compliance/regulatory-map.yaml` |
+| `validation-schedule.yaml` exists | `compliance/validation-schedule.yaml` |
+| `risk-assessment.md` exists | `compliance/risk-assessment.md` |
+| `RULES.md` exists | `RULES.md` |
+
+### 10. Audit Hooks
+
+Checks the hooks configuration for compliance instrumentation:
+
+| Check | What it verifies |
+|-------|------------------|
+| `hooks/hooks.yaml` exists | Hook file present |
+| Compliance hooks configured | `hooks.yaml` contains `compliance: true` on at least one hook |
+
+Compliance hooks are hooks that carry `compliance: true` in `hooks.yaml`. They are the mechanism for injecting audit logging, communications checks, and escalation logic into the agent lifecycle.
+
+## Interpreting results
+
+- **Pass (✓)** — The check passed. The configuration satisfies this requirement.
+- **Warning (~)** — The configuration is incomplete or suboptimal for this requirement. Warnings do not block `gitagent audit` but should be reviewed by compliance teams.
+- **Failure (✗)** — The configuration fails this requirement. For items that are hard requirements under the declared frameworks or risk tier, these represent regulatory gaps.
+
+<Warning>
+`gitagent audit` is for informational purposes only and does not constitute legal advice. Consult with legal and compliance teams for definitive regulatory assessments. The audit report is a tool to help identify gaps — it is not a substitute for a formal compliance review.
+</Warning>
+
+## Integrating with CI/CD
+
+For CI/CD gating, use `gitagent validate --compliance` rather than `gitagent audit`. The validate command exits with a non-zero status on errors, which blocks pipelines.
+
+```yaml
+# .github/workflows/agent-ci.yml
+name: Agent CI
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g gitagent
+      - run: gitagent validate
+      - run: gitagent validate --compliance
+```
+
+Run `gitagent audit` as a separate step to produce a human-readable compliance report that can be archived as a CI artifact:
+
+```yaml
+      - name: Generate compliance audit report
+        run: gitagent audit > compliance-report.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compliance-report
+          path: compliance-report.txt
+```
+
+<Tip>
+Run `gitagent audit` after every significant change to agent configuration — not just in CI. Reviewing the output locally before opening a pull request helps catch compliance regressions early, when they are cheapest to fix.
+</Tip>

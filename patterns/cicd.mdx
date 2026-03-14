@@ -1,0 +1,186 @@
+---
+title: "CI/CD for agents"
+description: "Run gitagent validate on every push via GitHub Actions. Block bad merges, enforce compliance checks, and auto-deploy — treat agent quality like code quality."
+---
+
+Agent definitions are code. They should be treated with the same quality gates as any other software: automated validation on every push, compliance checks before merge, and blocked deployments when checks fail.
+
+gitagent ships a `validate` command designed to run in CI. A single flag — `--compliance` — adds regulatory compliance checks on top of structural validation.
+
+## gitagent validate
+
+Run `gitagent validate` to check an agent against the specification:
+
+```bash
+# Validate the agent in the current directory
+gitagent validate
+
+# Validate with full compliance checks
+gitagent validate --compliance
+
+# Validate a specific directory
+gitagent validate -d ./examples/full --compliance
+```
+
+### What gets validated
+
+**Structural validation (always runs):**
+
+- `agent.yaml` — JSON schema validation, required fields (`name`, `version`, `description`), referenced skills/tools/agents exist
+- `SOUL.md` — exists, not empty, has real content
+- Skills — valid SKILL.md frontmatter, name matches directory, description length, instruction size
+- Hooks — valid YAML, referenced scripts exist at specified paths
+- Tools — valid YAML schema
+
+**Compliance validation (`--compliance` flag):**
+
+- Risk tier required when compliance section exists
+- `high` and `critical` tiers require `human_in_the_loop: always` or `conditional`
+- `high` and `critical` tiers require `audit_logging: true`
+- `high` and `critical` tiers require `validation_cadence: quarterly` or more frequent
+- FINRA: `communications.fair_balanced` and `communications.no_misleading` must be `true`
+- Federal Reserve: `model_risk` section must be present with `ongoing_monitoring: true`
+- SEC: audit logging and PII handling checks
+- CFPB: bias testing recommendation
+- Compliance artifacts directory check (`compliance/` directory and required files)
+- Vendor management metadata for dependencies
+
+<Note>
+  Run `gitagent validate --compliance` locally before pushing. The same command runs in CI — no surprises.
+</Note>
+
+## GitHub Actions workflow
+
+Add this workflow to `.github/workflows/validate.yml` to validate on every push and pull request:
+
+```yaml
+name: Validate Agent
+
+on:
+  push:
+    branches: [main, develop, staging]
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install gitagent
+        run: npm install -g gitagent
+
+      - name: Validate agent structure
+        run: gitagent validate -d .
+
+      - name: Validate compliance
+        run: gitagent validate -d . --compliance
+```
+
+This workflow:
+1. Runs on every push to `main`, `develop`, and `staging`
+2. Runs on every PR targeting `main` or `staging`
+3. Fails the build if structural validation fails
+4. Fails the build if compliance validation fails
+
+Merges to protected branches are blocked when the workflow fails.
+
+## Stricter CI with --compliance
+
+For regulated agents, the `--compliance` flag enforces the full regulatory checklist. The checks map directly to the `compliance` section in `agent.yaml`:
+
+```bash
+# In CI, always run with --compliance for regulated agents
+gitagent validate --compliance
+```
+
+The compliance checks that can fail a build:
+
+| Check | When it fails |
+|-------|---------------|
+| Risk tier missing | `compliance` section exists but no `risk_tier` |
+| HITL not configured | `risk_tier: high` without `human_in_the_loop: always/conditional` |
+| Audit logging missing | `risk_tier: high` without `audit_logging: true` |
+| Validation cadence too infrequent | `risk_tier: high` with `validation_cadence: annual` |
+| FINRA 2210 violation | FINRA framework without `fair_balanced: true` or `no_misleading: true` |
+| Fed Reserve model risk missing | Federal Reserve framework without `model_risk.ongoing_monitoring: true` |
+| Compliance artifacts missing | `high`/`critical` tier without `compliance/` directory |
+
+## Auto-deploy on merge to main
+
+Extend the workflow to deploy on merge to `main`:
+
+```yaml
+name: Validate and Deploy Agent
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g gitagent
+      - run: gitagent validate --compliance
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g gitagent
+      - name: Export agent for deployment
+        run: gitagent export --format system-prompt -o agent-prompt.md
+      - name: Deploy
+        run: |
+          # Your deployment step here
+          # e.g., push agent-prompt.md to your inference platform
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+The `deploy` job only runs after `validate` passes and only on pushes to `main` (not PRs). Validation is a hard gate — deployment is blocked if any check fails.
+
+## Generating a compliance audit report in CI
+
+Use `gitagent audit` to generate a full compliance checklist as a CI artifact:
+
+```yaml
+      - name: Generate compliance audit report
+        run: gitagent audit -d . > compliance-report.txt
+
+      - name: Upload compliance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-audit
+          path: compliance-report.txt
+```
+
+The audit report covers all nine compliance sections — Risk Classification, Supervision, Recordkeeping, Model Risk Management, Data Governance, Communications, Vendor Management, Compliance Artifacts, and Audit Hooks — and marks each check as pass, fail, or warning.
+
+<CardGroup cols={2}>
+  <Card title="Branch-based deployment" href="/patterns/branching">
+    Use branches to promote agent changes through dev → staging → main.
+  </Card>
+  <Card title="Human-in-the-loop" href="/patterns/human-in-the-loop">
+    Add human review gates on top of automated validation for regulated agents.
+  </Card>
+</CardGroup>

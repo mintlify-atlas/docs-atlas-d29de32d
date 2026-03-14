@@ -1,0 +1,119 @@
+---
+title: 'Knowledge schema'
+description: 'Reference document index in knowledge/index.yaml. Field reference and always_load behavior.'
+---
+
+The `knowledge/` directory holds reference documents the agent can consult. An optional `index.yaml` file catalogues them with retrieval hints, priority levels, and loading flags.
+
+## Directory structure
+
+```
+knowledge/
+├── index.yaml              # Optional: document index
+├── owasp-top-10.md         # Reference documents
+├── finra-rules-summary.md
+├── sr-11-7-guide.pdf
+└── compliance-procedures.csv
+```
+
+Knowledge documents can be in any readable format: `.md`, `.txt`, `.csv`, `.pdf`, or other formats.
+
+## index.yaml format
+
+```yaml
+documents:
+  - path: owasp-top-10.md
+    tags: [security, owasp, reference]
+    priority: high
+    always_load: true
+    description: OWASP Top 10 web application security risks
+  - path: sr-11-7-guide.pdf
+    tags: [federal-reserve, model-risk]
+    priority: medium
+  - path: compliance-procedures.csv
+    tags: [procedures, internal]
+    priority: low
+```
+
+## Document entry fields
+
+<ParamField path="path" type="string" required>
+  File path relative to the `knowledge/` directory.
+
+  ```yaml
+  path: owasp-top-10.md
+  ```
+</ParamField>
+
+<ParamField path="tags" type="string[]">
+  Tags for retrieval and categorization. Must be unique within the entry. Used by adapters and retrieval systems to filter documents.
+</ParamField>
+
+<ParamField path="priority" type="string">
+  Retrieval priority: `low`, `medium`, or `high`. Higher-priority documents are retrieved preferentially when context space is limited.
+</ParamField>
+
+<ParamField path="always_load" type="boolean">
+  Whether to include this document in every session context. Default: `false`.
+
+  When `true`, the document content is included in the system prompt on every session start, regardless of the current task. Use for foundational reference documents the agent should always have available (e.g., a security vulnerability reference for a security agent, or a regulatory rules summary for a compliance agent).
+</ParamField>
+
+<ParamField path="description" type="string">
+  Human-readable description of what this document contains. Helps the agent understand when to consult this document.
+</ParamField>
+
+## How always_load works in adapters
+
+Adapters that produce system prompts include `always_load: true` documents directly in the system prompt:
+
+| Adapter | Behavior |
+|---|---|
+| `system-prompt` | Documents included in the concatenated system prompt |
+| `claude-code` | Documents referenced in `CLAUDE.md` with `--add-dir` |
+| `lyzr` | Appended to `agent_instructions` |
+| `openai` | Included in the `instructions` string |
+| `nanobot` | Included in the system prompt file |
+
+Documents without `always_load: true` are available for the agent to reference on-demand but are not automatically included in context.
+
+## Example — standard agent
+
+From `examples/standard/knowledge/index.yaml`:
+
+```yaml
+documents:
+  - path: owasp-top-10.md
+    tags: [security, owasp, reference]
+    priority: high
+    always_load: true
+```
+
+The OWASP Top 10 document is loaded on every session start, ensuring the code review agent always has the vulnerability reference available without needing to ask for it.
+
+## JSON schema
+
+The knowledge index schema is at `spec/schemas/knowledge.schema.json`, referenced at `https://gitagent.dev/schemas/knowledge.schema.json`.
+
+```json
+{
+  "required": ["documents"],
+  "properties": {
+    "documents": {
+      "type": "array",
+      "items": {
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+          "always_load": { "type": "boolean", "default": false },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+```

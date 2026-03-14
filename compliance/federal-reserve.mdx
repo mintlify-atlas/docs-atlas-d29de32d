@@ -1,0 +1,181 @@
+---
+title: "Federal Reserve compliance"
+description: "How GitAgent maps to SR 11-7 (Model Risk Management) and SR 23-4 (Third-Party Risk Management)."
+---
+
+The Federal Reserve's supervisory guidance on model risk and third-party risk applies to AI agents operating in regulated financial institutions. GitAgent maps both SR 11-7 and SR 23-4 directly to structured fields in `agent.yaml`.
+
+Declare `federal_reserve` in your `frameworks` array to enable Federal Reserve–specific validation:
+
+```yaml
+compliance:
+  risk_tier: high
+  frameworks:
+    - federal_reserve
+```
+
+<Warning>
+When `federal_reserve` is in `frameworks`, the validator **requires** a `model_risk` section with `ongoing_monitoring: true`. Missing either is a validation error that blocks deployment.
+</Warning>
+
+## SR 11-7 — Model Risk Management
+
+<Accordion title="What SR 11-7 requires">
+Federal Reserve Supervisory Letter SR 11-7 (Guidance on Model Risk Management) requires financial institutions to maintain a comprehensive model risk management framework. Key elements: a model inventory, conceptual soundness documentation, independent validation at defined cadences, ongoing performance monitoring, outcomes analysis (back-testing), and drift detection. AI/ML models, including LLM-based agents, are subject to SR 11-7.
+</Accordion>
+
+SR 11-7 maps to the `compliance.model_risk` section:
+
+```yaml
+compliance:
+  model_risk:
+    inventory_id: MRM-2026-0047        # ID in the firm's model inventory register
+    validation_cadence: quarterly      # annual | semi_annual | quarterly | monthly
+    validation_type: full              # full | targeted | change_based
+    conceptual_soundness: compliance/risk-assessment.md  # Link to documentation
+    ongoing_monitoring: true           # Continuous performance tracking
+    outcomes_analysis: true            # Back-testing against actual results
+    drift_detection: true              # Monitor for model degradation
+    parallel_testing: false            # Run alongside existing system
+```
+
+### Field reference
+
+| Field | Description |
+|-------|-------------|
+| `inventory_id` | Unique identifier in the firm's model inventory. SR 11-7 requires all models to be registered. |
+| `validation_cadence` | How often independent validation is performed. Quarterly or more frequent is recommended for `high`/`critical` agents. |
+| `validation_type` | `full` — complete re-validation; `targeted` — focused scope; `change_based` — triggered by model changes. |
+| `conceptual_soundness` | Path to documentation assessing the model's theoretical basis and assumptions. |
+| `ongoing_monitoring` | Continuous tracking of model outputs for performance degradation. Required when `federal_reserve` is in frameworks. |
+| `outcomes_analysis` | Back-testing — comparing model outputs against actual results over time. |
+| `drift_detection` | Automated detection of model degradation or distributional shift. |
+| `parallel_testing` | Run the agent alongside an existing system to compare outputs before full cutover. |
+
+### What `gitagent validate --compliance` checks for SR 11-7
+
+| Check | Severity |
+|-------|----------|
+| `model_risk` section exists when `federal_reserve` is in frameworks | **Error** |
+| `model_risk.ongoing_monitoring: true` when `federal_reserve` is in frameworks | **Error** |
+| `validation_cadence` is `quarterly` or more frequent for `high`/`critical` tiers | Warning |
+
+### What `gitagent audit` reports for SR 11-7
+
+- Model inventory ID assigned
+- Validation cadence defined
+- Validation type specified
+- Conceptual soundness documented
+- Ongoing monitoring enabled
+- Outcomes analysis enabled
+- Drift detection enabled
+
+<Note>
+SR 11-7 Section IV emphasizes independent review — the reviewer must not be the same unit that developed and uses the model. This is the model-risk basis for GitAgent's segregation of duties maker/checker separation. See [Segregation of duties](/compliance/segregation-of-duties).
+</Note>
+
+## SR 23-4 — Third-Party Risk Management
+
+<Accordion title="What SR 23-4 requires">
+Federal Reserve Supervisory Letter SR 23-4 (Guidance on Managing Outsourcing Risk) requires firms to conduct due diligence on third-party service providers, obtain SOC reports, ensure vendors notify the firm of material AI changes, and assess fourth-party (subcontractor) risk. When an AI agent depends on third-party agents or services, each dependency is a vendor relationship subject to SR 23-4.
+</Accordion>
+
+SR 23-4 maps to two locations in `agent.yaml`:
+
+1. **`compliance.vendor_management`** — top-level firm-wide assessment
+2. **`dependencies[].vendor_management`** — per-dependency due diligence metadata
+
+### compliance.vendor_management
+
+```yaml
+compliance:
+  vendor_management:
+    due_diligence_complete: true        # Vendor DD performed for all third parties
+    soc_report_required: true           # SOC 2 report required from vendors
+    vendor_ai_notification: true        # Vendor must notify firm of AI/model changes
+    subcontractor_assessment: true      # Fourth-party (subcontractor) risk assessed
+```
+
+### Per-dependency vendor management
+
+For each entry in `dependencies`, add a `vendor_management` block with due diligence metadata:
+
+```yaml
+dependencies:
+  - name: fact-checker
+    source: https://github.com/org/fact-checker.git
+    version: ^1.0.0
+    mount: agents/fact-checker
+    vendor_management:
+      due_diligence_date: "2026-01-15"  # When due diligence was completed
+      soc_report: true                   # SOC 2 report obtained
+      risk_assessment: low               # low | medium | high
+```
+
+### What `gitagent validate --compliance` checks for SR 23-4
+
+| Check | Severity |
+|-------|----------|
+| Each dependency under `finra` or `federal_reserve` frameworks has `vendor_management` metadata | Warning |
+
+### What `gitagent audit` reports for SR 23-4
+
+- Due diligence complete
+- SOC report requirement assessed
+- Vendor AI notification required
+- Subcontractor assessment done
+- Warning if dependencies exist but `vendor_management` is not configured
+
+<Warning>
+`gitagent validate --compliance` will warn for each dependency missing `vendor_management` metadata when `finra` or `federal_reserve` is in the frameworks list. This is a warning (not an error) but represents a regulatory gap that should be remediated before production deployment.
+</Warning>
+
+## Full Federal Reserve compliance example
+
+The following is the complete `model_risk` and `vendor_management` configuration from `examples/full/agent.yaml`:
+
+```yaml
+spec_version: "0.1.0"
+name: compliance-analyst
+version: 1.0.0
+
+dependencies:
+  - name: fact-checker
+    source: ./agents/fact-checker
+    version: 1.0.0
+    mount: agents/fact-checker
+    vendor_management:
+      due_diligence_date: "2026-01-15"
+      soc_report: false
+      risk_assessment: low
+
+compliance:
+  risk_tier: high
+  frameworks:
+    - finra
+    - federal_reserve
+    - sec
+    - cfpb
+
+  # SR 11-7 — Model Risk Management
+  model_risk:
+    inventory_id: MRM-2026-0047
+    validation_cadence: quarterly
+    validation_type: full
+    conceptual_soundness: compliance/risk-assessment.md
+    ongoing_monitoring: true
+    outcomes_analysis: true
+    drift_detection: true
+    parallel_testing: false
+
+  # SR 23-4 — Third-Party Risk Management
+  vendor_management:
+    due_diligence_complete: true
+    soc_report_required: true
+    vendor_ai_notification: true
+    subcontractor_assessment: true
+```
+
+<Tip>
+Point `conceptual_soundness` to your `compliance/risk-assessment.md` file. This creates a direct link between the SR 11-7 model inventory entry and the on-disk documentation that the model risk team and examiners will review.
+</Tip>

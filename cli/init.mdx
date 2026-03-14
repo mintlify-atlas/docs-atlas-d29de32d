@@ -1,0 +1,136 @@
+---
+title: 'gitagent init'
+description: 'Scaffold a new agent repository from a template.'
+sidebarTitle: 'init'
+---
+
+## Synopsis
+
+```bash
+gitagent init [options]
+```
+
+## Description
+
+`gitagent init` scaffolds a new gitagent repository in the target directory. It writes an `agent.yaml` manifest, a `SOUL.md` identity file, and additional files depending on the chosen template.
+
+The command will exit with an error if `agent.yaml` already exists in the target directory.
+
+## Options
+
+<ParamField path="-t, --template" type="string" default="standard">
+  Template to scaffold. One of `minimal`, `standard`, or `full`.
+</ParamField>
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Target directory. Created if it does not exist.
+</ParamField>
+
+## Templates
+
+### minimal
+
+The smallest valid gitagent — just the two required files.
+
+```
+agent.yaml
+SOUL.md
+```
+
+Use this when you want to start from scratch with no boilerplate.
+
+### standard
+
+A practical starting point with skill, tool, and knowledge scaffolding.
+
+```
+agent.yaml
+SOUL.md
+RULES.md
+AGENTS.md
+skills/
+  example-skill/
+    SKILL.md
+tools/
+knowledge/
+  index.yaml
+```
+
+The generated `agent.yaml` includes model preferences (`claude-sonnet-4-5-20250929`), runtime config, and empty `skills` / `tools` / `tags` arrays ready to fill in.
+
+### full
+
+A production-ready scaffold with compliance, memory, hooks, and lifecycle management.
+
+```
+agent.yaml          # compliance section, model fallbacks, delegation
+SOUL.md
+RULES.md            # extended rules including regulatory constraints
+AGENTS.md
+DUTIES.md           # segregation of duties policy
+skills/
+  example-skill/
+    SKILL.md
+tools/
+knowledge/
+  index.yaml
+memory/
+  MEMORY.md
+  memory.yaml
+workflows/
+hooks/
+  hooks.yaml
+  scripts/
+    on-start.sh
+    on-error.sh
+examples/
+  scenarios/
+agents/
+compliance/
+  regulatory-map.yaml
+  validation-schedule.yaml
+  risk-assessment.md
+config/
+  default.yaml
+.gitignore          # adds .gitagent/ entry
+```
+
+The generated `agent.yaml` sets `compliance.risk_tier: standard` with a full recordkeeping, model risk, data governance, and communications configuration ready to customize.
+
+<Note>
+  `.gitagent/` (runtime state) is added to `.gitignore` automatically by the `full` template. If a `.gitignore` already exists, the entry is appended only if not already present.
+</Note>
+
+## Examples
+
+<CodeGroup>
+
+```bash Minimal agent in current directory
+gitagent init --template minimal
+```
+
+```bash Standard agent (default)
+gitagent init
+```
+
+```bash Full agent in a new directory
+gitagent init --template full --dir ./my-agent
+```
+
+```bash Minimal agent in a specific directory
+gitagent init -t minimal -d ./experiments/quick-agent
+```
+
+</CodeGroup>
+
+After scaffolding, edit `agent.yaml` with your agent's details and write your identity in `SOUL.md`, then validate:
+
+```bash
+gitagent validate -d ./my-agent
+```
+
+## Related commands
+
+- [validate](/cli/validate) — Validate the scaffolded agent against the specification
+- [info](/cli/info) — Display a summary of the agent configuration
+- [run](/cli/run) — Run the agent with an adapter

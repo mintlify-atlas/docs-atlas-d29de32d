@@ -1,0 +1,180 @@
+---
+title: "Agent directory structure"
+description: "Every file and directory in a gitagent repository, what it does, and whether it's required."
+---
+
+A gitagent repository can contain any combination of the following files and directories. Only two are required. Everything else is optional — add what your agent needs.
+
+## Full directory tree
+
+```
+my-agent/
+│
+│   # ── Core Identity (required) ──────────────────────────
+├── agent.yaml              # Manifest: name, version, model, skills, tools, compliance
+├── SOUL.md                 # Identity, personality, communication style, values
+│
+│   # ── Behavior & Rules ──────────────────────────────────
+├── RULES.md                # Hard constraints, must-always/must-never, safety boundaries
+├── DUTIES.md               # Segregation of duties policy and role boundaries
+├── AGENTS.md               # Framework-agnostic fallback instructions
+├── PROMPT.md               # Default task framing and output format
+│
+│   # ── Capabilities ──────────────────────────────────────
+├── skills/                 # Reusable capability modules (SKILL.md + scripts)
+│   └── code-review/
+│       ├── SKILL.md        # Frontmatter + instructions
+│       ├── scripts/        # Executable helpers
+│       ├── references/     # Supporting documents
+│       ├── assets/         # Templates, schemas
+│       └── examples/       # Example inputs/outputs
+├── tools/                  # MCP-compatible tool definitions
+│   └── my-tool.yaml        # Tool schema
+├── workflows/              # Multi-step procedures and playbooks
+│   ├── *.yaml              # Structured workflows
+│   └── *.md                # Narrative workflows
+│
+│   # ── Knowledge & Memory ────────────────────────────────
+├── knowledge/              # Reference documents the agent can consult
+│   ├── index.yaml          # Document index with always_load flags
+│   └── docs/
+├── memory/                 # Persistent cross-session memory
+│   ├── MEMORY.md           # Working memory (max 200 lines)
+│   ├── memory.yaml         # Memory configuration
+│   └── archive/            # Historical snapshots
+│
+│   # ── Lifecycle & Ops ───────────────────────────────────
+├── hooks/                  # Lifecycle event handlers
+│   ├── hooks.yaml          # Hook definitions
+│   └── scripts/            # Hook script implementations
+├── config/                 # Environment-specific overrides
+│   ├── default.yaml
+│   └── production.yaml
+├── compliance/             # Regulatory compliance artifacts
+│   ├── risk-assessment.md
+│   ├── regulatory-map.yaml
+│   └── validation-schedule.yaml
+│
+│   # ── Composition ───────────────────────────────────────
+├── agents/                 # Sub-agent definitions (recursive structure)
+│   └── fact-checker/
+│       ├── agent.yaml
+│       ├── SOUL.md
+│       └── DUTIES.md
+├── examples/               # Calibration interactions (few-shot)
+│   ├── good-outputs.md
+│   ├── bad-outputs.md
+│   └── scenarios/
+│
+│   # ── Runtime ───────────────────────────────────────────
+└── .gitagent/              # Runtime state (gitignored)
+    ├── deps/               # Installed dependencies
+    ├── state.json          # Current session state
+    └── cache/              # Temporary cache
+```
+
+## File and directory reference
+
+| File / directory | Purpose | Required? |
+|-----------------|---------|----------|
+| `agent.yaml` | The manifest — the only file with a strict schema. Declares name, version, model, skills, tools, and compliance config. | **Yes** |
+| `SOUL.md` | Agent identity: personality, communication style, values, and domain expertise. Must contain at least one non-empty paragraph. | **Yes** |
+| `RULES.md` | Hard constraints the agent must respect — must-always behaviors, must-never behaviors, output constraints, and safety guardrails. | No |
+| `DUTIES.md` | Segregation of duties policy. At root level: system-wide SOD policy and conflict matrix. Per-agent: this agent's role, permissions, and handoff participation. | No |
+| `AGENTS.md` | Framework-agnostic fallback instructions compatible with Cursor, Copilot, and other tools that read `AGENTS.md`. | No |
+| `PROMPT.md` | Default task framing and output format for the agent. | No |
+| `skills/` | Reusable capability modules following the Agent Skills open standard. Each skill is a subdirectory with a `SKILL.md` file. | No |
+| `tools/` | MCP-compatible tool definitions stored as `<name>.yaml` files. Optional implementation scripts can accompany each schema. | No |
+| `workflows/` | Multi-step procedures and playbooks, either as structured YAML or narrative Markdown. | No |
+| `knowledge/` | Reference documents the agent consults at runtime. An optional `index.yaml` controls retrieval priority and `always_load` flags. | No |
+| `memory/` | Persistent cross-session state. `MEMORY.md` is the working memory (200-line maximum). `memory.yaml` configures layers and archival policy. | No |
+| `hooks/` | Lifecycle event handlers. `hooks.yaml` maps events (`on_session_start`, `pre_tool_use`, `post_response`, etc.) to scripts. | No |
+| `config/` | Environment-specific configuration overrides. `default.yaml` is the base; `<env>.yaml` files are deep-merged on top. | No |
+| `compliance/` | Regulatory compliance artifacts required for `high` and `critical` risk tiers: `risk-assessment.md`, `regulatory-map.yaml`, `validation-schedule.yaml`. | No |
+| `agents/` | Sub-agent definitions. Each subdirectory is a fully recursive agent structure with its own `agent.yaml` and `SOUL.md`. Lightweight sub-agents can also be single `.md` files. | No |
+| `examples/` | Calibration interactions for few-shot learning. Include `good-outputs.md`, `bad-outputs.md`, and scenario files. | No |
+| `.gitagent/` | Runtime state directory — gitignored. Holds installed dependencies in `deps/`, session state in `state.json`, and temporary cache. | No |
+
+## Required files in detail
+
+### agent.yaml
+
+The only file with a strict JSON schema. Three fields are required: `name`, `version`, and `description`. All other fields are optional.
+
+```yaml
+spec_version: "0.1.0"
+name: my-agent
+version: 0.1.0
+description: A helpful assistant agent
+```
+
+See [agent.yaml — The manifest](/concepts/agent-manifest) for the full field reference.
+
+### SOUL.md
+
+Defines who the agent is. The minimum valid `SOUL.md` is a single non-empty paragraph. The recommended structure includes sections for Core Identity, Communication Style, Values & Principles, Domain Expertise, and Collaboration Style.
+
+```markdown
+# Soul
+
+## Core Identity
+I am a code review specialist. My purpose is to help teams ship secure,
+maintainable software by providing actionable, evidence-based feedback.
+
+## Communication Style
+Direct and precise. I categorize every finding by severity and always
+suggest a specific fix rather than just describing a problem.
+
+## Values & Principles
+- Security first — OWASP Top 10 issues are always CRITICAL
+- Correctness over cleverness
+- Respect the author's intent while improving the implementation
+```
+
+## Compliance artifacts
+
+For agents with `compliance.risk_tier` of `high` or `critical`, gitagent expects the `compliance/` directory to exist with the following files:
+
+<Warning>
+  Running `gitagent validate --compliance` will fail for `high` and `critical` risk tier agents that are missing compliance artifacts.
+</Warning>
+
+| File | Purpose |
+|------|---------|
+| `compliance/risk-assessment.md` | Documents the risk tier justification and applicable regulatory frameworks |
+| `compliance/regulatory-map.yaml` | Maps agent capabilities to specific regulatory rules and controls |
+| `compliance/validation-schedule.yaml` | Defines validation cadence for SR 11-7 model risk management |
+
+## Sub-agent structure
+
+Sub-agents in the `agents/` directory are full recursive agent structures — they can have their own `agent.yaml`, `SOUL.md`, `RULES.md`, `skills/`, and even nested `agents/`. Lightweight sub-agents can also be defined as a single Markdown file with YAML frontmatter:
+
+```markdown
+---
+name: fact-checker
+description: Verifies claims against authoritative sources
+model:
+  preferred: claude-haiku-4-5-20251001
+delegation:
+  mode: auto
+  triggers:
+    - factual_claim_detected
+---
+
+# Fact Checker
+
+You verify factual claims by consulting authoritative sources.
+Always cite your sources. Flag unverifiable claims explicitly.
+```
+
+## Runtime state
+
+The `.gitagent/` directory is created at runtime and should be added to `.gitignore`. It stores:
+
+- **`deps/`** — Agent dependencies cloned by `gitagent install`
+- **`state.json`** — Current session state
+- **`cache/`** — Temporary runtime cache
+
+<Tip>
+  Run `gitagent init --template full` to scaffold an agent with every directory pre-created and populated with example content.
+</Tip>

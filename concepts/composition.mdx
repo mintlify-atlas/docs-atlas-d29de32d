@@ -1,0 +1,228 @@
+---
+title: "Inheritance & composition"
+description: "Extend parent agents, compose dependencies, and delegate to sub-agents using gitagent's composition primitives."
+---
+
+gitagent provides three primitives for building multi-agent systems and reusing agent definitions:
+
+- **`extends`** — single inheritance from a parent agent
+- **`dependencies`** — compose external agents as mounted capabilities
+- **`agents/`** — define sub-agents locally and configure delegation
+
+## Extending agents with `extends`
+
+A child agent can inherit from a parent using the `extends` field in `agent.yaml`. The value is a git URL or local path:
+
+```yaml
+extends: https://github.com/org/base-agent.git
+```
+
+The child inherits the parent's full configuration and can override specific fields. Resolution rules by file type:
+
+| File | Merge behavior |
+|------|----------------|
+| `agent.yaml` | Deep merge — child fields override parent fields |
+| `SOUL.md` | Child replaces parent entirely |
+| `RULES.md` | Union — child rules append to parent rules |
+| `skills/`, `tools/` | Union — child shadows parent on name collision |
+| `memory/` | Isolated per agent — not inherited |
+| `compliance/` | Child inherits parent compliance config, can override |
+
+<Note>
+  `extends` supports single inheritance. An agent can have at most one parent.
+</Note>
+
+## Dependencies
+
+The `dependencies` array composes external agents as mounted capabilities. Unlike `extends`, dependencies are independent agents that run alongside the main agent — they are not merged into it.
+
+```yaml
+dependencies:
+  - name: fact-checker
+    source: https://github.com/org/fact-checker-agent.git
+    version: ^1.0.0
+    mount: agents/fact-checker
+    vendor_management:
+      due_diligence_date: "2026-01-15"
+      soc_report: true
+      risk_assessment: low
+```
+
+### Dependency fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | **Yes** | Dependency identifier |
+| `source` | **Yes** | Git URL or local path |
+| `version` | No | Semantic version constraint (e.g. `^1.0.0`) |
+| `mount` | No | Directory to install into. Defaults to `.gitagent/deps/<name>` |
+| `vendor_management.due_diligence_date` | No | Date vendor due diligence was completed (ISO 8601) |
+| `vendor_management.soc_report` | No | Whether a SOC 2 report is on file |
+| `vendor_management.risk_assessment` | No | Risk level: `low`, `medium`, or `high` |
+
+<Warning>
+  For agents with `compliance.frameworks` including `federal_reserve` (SR 23-4), `vendor_management` metadata on each dependency is required. `gitagent validate --compliance` checks for this.
+</Warning>
+
+### Installing dependencies
+
+Run `gitagent install` to resolve all declared dependencies:
+
+<Steps>
+  <Step title="Declare dependencies in agent.yaml">
+    Add entries to the `dependencies` array with a `source` (git URL or local path) and optionally a `version` and `mount` path.
+
+    ```yaml
+    dependencies:
+      - name: fact-checker
+        source: https://github.com/org/fact-checker-agent.git
+        version: ^1.0.0
+        mount: agents/fact-checker
+    ```
+  </Step>
+  <Step title="Run gitagent install">
+    ```bash
+    gitagent install
+    ```
+
+    For each dependency:
+    - Local paths are copied to the mount location
+    - Git URLs are shallow-cloned at the specified version or branch
+    - The target directory is the `mount` path, or `.gitagent/deps/<name>` if no mount is specified
+    - The CLI validates that installed dependencies contain a valid `agent.yaml`
+  </Step>
+  <Step title="Verify installation">
+    Installed dependencies appear at their mount paths. If you specified `mount: agents/fact-checker`, the dependency is now available as a sub-agent at that path.
+
+    ```bash
+    gitagent info   # shows installed sub-agents
+    ```
+  </Step>
+</Steps>
+
+## Sub-agents
+
+Sub-agents are defined in the `agents/` directory and configured in the `agents` section of `agent.yaml`.
+
+### Defining sub-agents
+
+A sub-agent can be a full directory structure (recursive agent) or a lightweight single file:
+
+**Full sub-agent** (`agents/fact-checker/`):
+```
+agents/
+└── fact-checker/
+    ├── agent.yaml
+    ├── SOUL.md
+    └── DUTIES.md
+```
+
+**Lightweight sub-agent** (`agents/fact-checker.md`):
+```markdown
+---
+name: fact-checker
+description: Verifies factual claims against authoritative sources
+model:
+  preferred: claude-haiku-4-5-20251001
+delegation:
+  mode: auto
+  triggers:
+    - factual_claim_detected
+---
+
+# Fact Checker
+
+You verify factual claims by consulting authoritative sources.
+Always cite your sources. Flag unverifiable claims explicitly.
+```
+
+### Configuring delegation
+
+The `agents` section in `agent.yaml` configures how and when the parent agent delegates to each sub-agent:
+
+```yaml
+agents:
+  reviewer:
+    description: Reviews code for quality
+    delegation:
+      mode: auto
+      triggers:
+        - "review this code"
+        - code_review_requested
+  security-scanner:
+    description: Scans for vulnerabilities
+    delegation:
+      mode: manual
+```
+
+### Delegation modes
+
+| Mode | Behavior |
+|------|---------|
+| `auto` | The parent agent delegates automatically when a trigger condition is met |
+| `manual` | The parent agent must explicitly call the sub-agent |
+| `explicit` | Delegation requires an explicit instruction in the prompt |
+
+The top-level `delegation` field sets the default strategy for all sub-agents:
+
+```yaml
+delegation:
+  mode: auto       # default for all sub-agents
+  router: my-router-agent   # when mode=router, names the routing agent
+```
+
+## Git caching for remote dependencies
+
+When `gitagent install` fetches git-based dependencies, it caches repositories locally to avoid repeated clones.
+
+**Cache location:** `~/.gitagent/cache/<hash>/`
+
+The cache key is the first 16 characters of the SHA-256 hash of `{url}#{branch}`.
+
+| Flag | Behavior |
+|------|---------|
+| *(default)* | Clone once, reuse from cache on subsequent installs |
+| `--refresh` | Pull latest changes into the existing cached clone |
+| `--no-cache` | Clone to a temp directory, delete when done |
+
+The same caching mechanism is used by `gitagent run` when loading remote agent repos.
+
+## Segregation of duties in multi-agent systems
+
+When building multi-agent systems with compliance requirements, use `compliance.segregation_of_duties` to declare role boundaries and conflict rules across the agent system:
+
+```yaml
+compliance:
+  segregation_of_duties:
+    roles:
+      - id: analyst
+        description: Performs regulatory analysis and generates findings
+        permissions: [create, submit]
+      - id: reviewer
+        description: Reviews analysis for accuracy and completeness
+        permissions: [review, approve, reject]
+      - id: auditor
+        description: Audits completed reviews and maintains compliance trail
+        permissions: [audit, report]
+    conflicts:
+      - [analyst, reviewer]    # analyst cannot approve own work
+      - [analyst, auditor]     # analyst cannot audit own work
+      - [reviewer, auditor]    # reviewer cannot audit work they approved
+    assignments:
+      compliance-analyst: [analyst]
+      fact-checker: [reviewer]
+    isolation:
+      state: full
+      credentials: separate
+    handoffs:
+      - action: regulatory_filing
+        required_roles: [analyst, reviewer]
+        approval_required: true
+    enforcement: strict   # strict (blocks deployment) | advisory (warnings only)
+```
+
+Each sub-agent should have its own `DUTIES.md` declaring its role, permissions, and handoff participation. The root-level `DUTIES.md` documents the system-wide policy.
+
+<Tip>
+  Run `gitagent validate --compliance` to check that no agent in `assignments` holds roles that appear together in `conflicts`, and that all `handoffs.required_roles` include at least two distinct roles.
+</Tip>

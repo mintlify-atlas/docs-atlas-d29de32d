@@ -1,0 +1,84 @@
+---
+title: "GitAgent"
+description: "A framework-agnostic, git-native standard for defining AI agents. Clone a repo, get an agent."
+---
+
+<img
+  src="https://raw.githubusercontent.com/open-gitagent/gitagent/main/banner.png"
+  alt="GitAgent banner"
+  style={{ borderRadius: '8px', width: '100%' }}
+/>
+
+## Your repository becomes your agent
+
+GitAgent defines a portable, version-controlled, human-readable format for AI agent definitions. An agent is fully described by files in a git repository. Cloning the repo gives you a complete agent — ready to run on any framework.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Create and run your first agent in under 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the GitAgent CLI globally via npm
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Understand the git-native agent model
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Every command, flag, and option documented
+  </Card>
+</CardGroup>
+
+## Why GitAgent?
+
+Every AI framework has its own structure. There's no universal, portable way to define an agent that works across Claude Code, OpenAI, LangChain, CrewAI, and AutoGen. GitAgent fixes that.
+
+<CardGroup cols={2}>
+  <Card title="Git-native" icon="code-branch">
+    Version control, branching, diffing, and collaboration built in. Your agent history is your git history.
+  </Card>
+  <Card title="Framework-agnostic" icon="shuffle">
+    Define once, export to Claude Code, OpenAI, CrewAI, OpenClaw, Nanobot, Lyzr, or GitHub Models.
+  </Card>
+  <Card title="Compliance-ready" icon="shield-check">
+    First-class support for FINRA, Federal Reserve, SEC, and CFPB regulatory requirements baked into the manifest.
+  </Card>
+  <Card title="Composable" icon="puzzle-piece">
+    Agents can extend parent agents, declare dependencies, and delegate to sub-agents.
+  </Card>
+</CardGroup>
+
+## The standard in two files
+
+Only two files are required to define a valid agent:
+
+```yaml agent.yaml
+spec_version: "0.1.0"
+name: my-agent
+version: 0.1.0
+description: A helpful assistant agent
+```
+
+```markdown SOUL.md
+# My Agent
+
+## Core Identity
+I am a helpful assistant that...
+```
+
+Everything else — skills, tools, workflows, compliance, memory — is optional. Add what you need, ignore the rest.
+
+## Key features
+
+- **10 CLI commands** — `init`, `validate`, `info`, `export`, `import`, `install`, `run`, `audit`, `skills`, `lyzr`
+- **9 export adapters** — system-prompt, claude-code, openai, crewai, openclaw, nanobot, lyzr, github, git
+- **Full compliance stack** — FINRA Rules 3110/4511/2210, SR 11-7, SR 23-4, Reg S-P, CFPB
+- **Skills registry** — Search and install reusable capability modules from SkillsMP or GitHub
+- **Git caching** — Fast repeated runs from remote repos via `~/.gitagent/cache/`
+
+## Specification
+
+GitAgent is an open standard. The full specification is available at [`spec/SPECIFICATION.md`](https://github.com/open-gitagent/gitagent/blob/main/spec/SPECIFICATION.md) with JSON schemas for validation at `spec/schemas/`.
+
+<Note>
+  GitAgent is published on npm as `@shreyaskapale/gitagent`. Install with `npm install -g gitagent`.
+</Note>

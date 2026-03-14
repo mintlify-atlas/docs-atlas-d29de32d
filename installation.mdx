@@ -1,0 +1,137 @@
+---
+title: "Installation"
+description: "Install gitagent globally via npm, or run it without installation using npx."
+keywords: ["gitagent", "install", "npm", "npx", "setup", "requirements"]
+---
+
+## Requirements
+
+- **Node.js 18 or later** — gitagent uses native ES modules and requires the Node.js 18+ runtime.
+- **npm 7 or later** — included with Node.js 18+.
+
+Check your current versions:
+
+```bash
+node --version   # must be >= 18
+npm --version
+```
+
+If you need to upgrade Node.js, use [nvm](https://github.com/nvm-sh/nvm) or download from [nodejs.org](https://nodejs.org).
+
+---
+
+## Install globally
+
+Installing globally makes the `gitagent` command available everywhere on your system.
+
+<CodeGroup>
+
+```bash npm
+npm install -g gitagent
+```
+
+```bash npx (no install)
+npx gitagent --help
+```
+
+</CodeGroup>
+
+<Note>
+  With `npx`, each invocation downloads and runs gitagent without a permanent install. This is useful for one-off commands or CI pipelines. For regular local development, the global install is more convenient.
+</Note>
+
+---
+
+## Verify the installation
+
+After installing, confirm the CLI is working:
+
+```bash
+gitagent --version
+```
+
+Expected output:
+
+```
+0.1.7
+```
+
+View all available commands:
+
+```bash
+gitagent --help
+```
+
+---
+
+## Upgrade to the latest version
+
+To upgrade an existing global installation:
+
+```bash
+npm install -g gitagent@latest
+```
+
+To check what version you currently have versus what is available:
+
+```bash
+gitagent --version
+npm view gitagent version
+```
+
+---
+
+## Environment variables
+
+gitagent uses environment variables for API keys when running agents with specific adapters. None are required for `init`, `validate`, `info`, or `export`.
+
+| Variable | Used by | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | Claude, OpenClaw, Nanobot adapters | Anthropic API key. The Claude adapter uses Claude Code's own auth — this variable is used by OpenClaw and Nanobot auto-provisioning. |
+| `OPENAI_API_KEY` | OpenAI adapter | OpenAI API key. Required when running with `--adapter openai`. |
+| `LYZR_API_KEY` | Lyzr adapter, `gitagent lyzr` commands | Lyzr Studio API key. Required for deploying and running agents on Lyzr. |
+| `GITHUB_TOKEN` | GitHub Models adapter | GitHub personal access token with `models:read` scope. Also accepted as `GH_TOKEN`. |
+
+Set variables in your shell profile (e.g. `~/.zshrc` or `~/.bashrc`):
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."
+export LYZR_API_KEY="..."
+export GITHUB_TOKEN="ghp_..."
+```
+
+Or pass them inline for a single command:
+
+```bash
+LYZR_API_KEY="..." gitagent run -d ./my-agent -a lyzr -p "Hello"
+```
+
+<Tip>
+  The Claude Code adapter (`--adapter claude`, the default) relies on Claude Code's own authentication — it does not read `ANTHROPIC_API_KEY` directly. Run `claude auth` to authenticate Claude Code separately.
+</Tip>
+
+---
+
+## Package details
+
+| Field | Value |
+|-------|-------|
+| npm package | `@shreyaskapale/gitagent` |
+| Binary | `gitagent` |
+| License | MIT |
+| Repository | [github.com/open-gitagent/gitagent](https://github.com/open-gitagent/gitagent) |
+| Node.js requirement | `>=18` |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Create and run your first agent in under five minutes.
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Browse every command, flag, and option in the gitagent CLI.
+  </Card>
+</CardGroup>

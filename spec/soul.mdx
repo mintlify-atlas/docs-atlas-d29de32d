@@ -1,0 +1,125 @@
+---
+title: 'SOUL.md specification'
+description: 'SOUL.md defines who the agent is — identity, personality, communication style, and values. Required by every agent.'
+---
+
+`SOUL.md` defines who the agent *is*. It is one of the two required files in every gitagent repository (the other being `agent.yaml`). Unlike `agent.yaml`, `SOUL.md` has no strict schema — it is a free-form Markdown file with recommended sections.
+
+## What SOUL.md defines
+
+- **Identity** — What the agent is and its primary purpose
+- **Personality** — The agent's tone, character, and working style
+- **Communication style** — Formality, verbosity, structure preferences
+- **Values and principles** — What the agent prioritizes when trade-offs arise
+- **Domain expertise** — Areas of specialized knowledge
+- **Collaboration style** — How the agent works with humans and other agents
+
+## Requirements
+
+A valid `SOUL.md` must:
+
+1. Exist at the root of the agent repository
+2. Not be empty
+3. Contain at least one non-empty paragraph of real content
+
+`gitagent validate` checks all three conditions.
+
+<Warning>
+  A `SOUL.md` with only a heading and no body content will fail validation. The file must have substantive text describing the agent's identity.
+</Warning>
+
+## Recommended sections
+
+The specification recommends these sections, though the structure is flexible:
+
+### Core Identity
+
+What the agent is and what it does. This section is used by adapters that need a concise role description.
+
+```markdown
+## Core Identity
+I am a regulatory compliance analyst specializing in FINRA rules, SEC regulations,
+and Federal Reserve supervisory guidance.
+```
+
+### Communication Style
+
+Tone, formality level, how the agent structures responses.
+
+```markdown
+## Communication Style
+Precise, formal, and citation-heavy. I always reference specific rule numbers,
+regulatory notices, and supervisory letters.
+```
+
+### Values & Principles
+
+What the agent prioritizes when making decisions or trade-offs.
+
+```markdown
+## Values & Principles
+- Accuracy over speed
+- Conservative interpretation of ambiguous regulations
+- Transparency in reasoning
+```
+
+### Domain Expertise
+
+Areas of specialized knowledge the agent draws on.
+
+```markdown
+## Domain Expertise
+- FINRA rules and regulatory notices (2210, 3110, 4511)
+- SEC regulations (Reg BI, Reg S-P, 17a-4)
+- Federal Reserve supervisory letters (SR 11-7, SR 23-4)
+```
+
+### Collaboration Style
+
+How the agent works with humans and other agents, including escalation behavior.
+
+```markdown
+## Collaboration Style
+I escalate uncertainty rather than guessing. I ask clarifying questions when
+requirements are ambiguous.
+```
+
+## How adapters use SOUL.md
+
+Different adapters use `SOUL.md` in different ways:
+
+| Adapter | How SOUL.md is used |
+|---|---|
+| `system-prompt` | Included as the first section of the concatenated system prompt |
+| `claude-code` | Included in `CLAUDE.md` as the agent's identity section |
+| `crewai` | Parsed to extract `role`, `goal`, and `backstory` fields |
+| `lyzr` | `agent_role` extracted from Core Identity section; `agent_goal` from Values/Purpose section; full content goes into `agent_instructions` |
+| `openai` | Used as the `instructions` string in the `Agent()` constructor |
+| `openclaw` | Passed through to the workspace as `SOUL.md` |
+| `nanobot` | Prepended to the system prompt |
+| `github` | Included in the system message |
+
+## Best practices
+
+<Tip>
+  Write `SOUL.md` in the first person. The agent should be able to read this file and say "this is who I am."
+</Tip>
+
+- Be specific about domain and purpose — "I am a financial compliance analyst specializing in FINRA rules" is more useful than "I am a helpful assistant"
+- Include concrete communication style preferences that adapters can map to model parameters (e.g., "I am concise" translates to lower `max_tokens`)
+- List specific areas of expertise, not just general categories
+- Describe escalation behavior and collaboration patterns if the agent is part of a multi-agent system
+- Keep `SOUL.md` focused on identity, not rules or instructions — use `RULES.md` for constraints
+
+## Minimal valid SOUL.md
+
+```markdown
+# Soul
+
+I am a friendly assistant. I help with general questions and tasks,
+communicating in a clear and approachable manner.
+```
+
+## Full compliance agent SOUL.md
+
+See the [full example](/examples/full) for a `SOUL.md` with all recommended sections populated for a regulated financial services agent.

@@ -1,0 +1,243 @@
+---
+title: 'gitagent lyzr'
+description: 'Manage Lyzr Studio agents — create, update, inspect, and run.'
+sidebarTitle: 'lyzr'
+---
+
+## Synopsis
+
+```bash
+gitagent lyzr <subcommand> [options]
+```
+
+## Description
+
+`gitagent lyzr` is a set of four subcommands for managing agents on [Lyzr Studio](https://studio.lyzr.ai). It handles the full lifecycle: creating a new Lyzr agent from a gitagent definition, pushing updates, inspecting the linked agent ID, and running a one-liner that clones a repo, creates the agent on Lyzr, and chats with it.
+
+All subcommands require a `LYZR_API_KEY` environment variable (or `--api-key` flag).
+
+```bash
+export LYZR_API_KEY="your-api-key"
+```
+
+## Lyzr API endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/v3/agents/template/single-task` | `POST` | Create agent |
+| `/v3/agents/template/single-task/{id}` | `PUT` | Update agent |
+| `/v3/agents/{id}` | `GET` | Fetch agent info |
+| `/v3/inference/chat/` | `POST` | Chat with agent |
+
+Base URL: `https://agent-prod.studio.lyzr.ai`
+
+---
+
+## lyzr create
+
+Create a new agent on Lyzr Studio from the local gitagent definition.
+
+### Synopsis
+
+```bash
+gitagent lyzr create [options]
+```
+
+### Options
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory containing `agent.yaml` and `SOUL.md`.
+</ParamField>
+
+<ParamField path="--api-key" type="string">
+  Lyzr API key. Falls back to the `LYZR_API_KEY` environment variable.
+</ParamField>
+
+### Behavior
+
+1. Reads the agent definition from the directory
+2. Exports the agent to the Lyzr Studio API payload format
+3. Posts to `POST /v3/agents/template/single-task`
+4. Saves the returned agent ID to `.lyzr_agent_id` in the agent directory
+
+The `.lyzr_agent_id` file is used by subsequent `update`, `info`, and `run` commands to identify the agent without needing `--agent-id` each time.
+
+### Examples
+
+```bash
+gitagent lyzr create
+gitagent lyzr create -d ./examples/lyzr-agent
+gitagent lyzr create -d ./my-agent --api-key lzr_...
+```
+
+---
+
+## lyzr update
+
+Push the current gitagent definition to an existing Lyzr agent.
+
+### Synopsis
+
+```bash
+gitagent lyzr update [options]
+```
+
+### Options
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory.
+</ParamField>
+
+<ParamField path="--agent-id" type="string">
+  Lyzr agent ID. If omitted, the ID is read from `.lyzr_agent_id` in the agent directory.
+</ParamField>
+
+<ParamField path="--api-key" type="string">
+  Lyzr API key. Falls back to the `LYZR_API_KEY` environment variable.
+</ParamField>
+
+### Behavior
+
+1. Reads the agent ID from `--agent-id` or from `.lyzr_agent_id`
+2. Exports the current agent definition
+3. Sends a `PUT /v3/agents/template/single-task/{id}` request to sync the changes
+
+If no agent ID can be found, the command exits with an error and prompts you to run `gitagent lyzr create` first.
+
+### Examples
+
+```bash
+# Update using .lyzr_agent_id
+gitagent lyzr update
+
+# Update a specific agent by ID
+gitagent lyzr update --agent-id abc123
+
+# Update from a different directory
+gitagent lyzr update -d ./examples/lyzr-agent
+```
+
+---
+
+## lyzr info
+
+Show the Lyzr agent ID linked to the agent directory.
+
+### Synopsis
+
+```bash
+gitagent lyzr info [options]
+```
+
+### Options
+
+<ParamField path="-d, --dir" type="string" default=".">
+  Agent directory.
+</ParamField>
+
+### Behavior
+
+Reads the `.lyzr_agent_id` file in the agent directory and prints:
+
+- The agent ID
+- The inference URL (`https://agent-prod.studio.lyzr.ai/v3/inference/chat/`)
+- A link to Lyzr Studio
+
+If no `.lyzr_agent_id` file exists, the command prints a prompt to run `gitagent lyzr create`.
+
+### Examples
+
+```bash
+gitagent lyzr info
+gitagent lyzr info -d ./examples/lyzr-agent
+```
+
+---
+
+## lyzr run
+
+Clone a git agent repo, create it on Lyzr Studio, and chat — all in one command.
+
+### Synopsis
+
+```bash
+gitagent lyzr run [options]
+```
+
+Either `--repo` or `--dir` is required.
+
+### Options
+
+<ParamField path="-r, --repo" type="string">
+  Git repository URL to clone. Mutually exclusive with `--dir`.
+</ParamField>
+
+<ParamField path="-d, --dir" type="string">
+  Local agent directory. Mutually exclusive with `--repo`.
+</ParamField>
+
+<ParamField path="-b, --branch" type="string" default="main">
+  Git branch or tag to clone when using `--repo`.
+</ParamField>
+
+<ParamField path="--refresh" type="boolean" default="false">
+  Force re-clone of the repository.
+</ParamField>
+
+<ParamField path="-p, --prompt" type="string">
+  Message to send to the agent. If omitted, the agent is created (if needed) and the ID is printed, but no chat is started.
+</ParamField>
+
+<ParamField path="--api-key" type="string">
+  Lyzr API key. Falls back to the `LYZR_API_KEY` environment variable.
+</ParamField>
+
+<ParamField path="--user-id" type="string">
+  User ID for the chat session. Used in the inference API payload.
+</ParamField>
+
+### Behavior
+
+1. Resolves the agent directory — clones from `--repo` (with git caching) or uses `--dir`
+2. Checks for a `.lyzr_agent_id` file — creates the agent on Lyzr if none exists
+3. Saves the agent ID to `.lyzr_agent_id`
+4. If `--prompt` is provided, sends the message to `POST /v3/inference/chat/` and prints the response
+5. If no `--prompt`, prints the agent ID and exits
+
+### Examples
+
+<CodeGroup>
+
+```bash Full one-liner: clone + create + chat
+gitagent lyzr run -r https://github.com/user/my-agent -p "Hello"
+```
+
+```bash Run from a local directory
+gitagent lyzr run -d ./examples/lyzr-agent -p "Summarize AI trends"
+```
+
+```bash Create only (no chat)
+gitagent lyzr run -r https://github.com/user/my-agent
+```
+
+```bash Run with a specific branch
+gitagent lyzr run -r https://github.com/user/my-agent -b develop -p "Hello"
+```
+
+```bash Pass a user ID for session tracking
+gitagent lyzr run -d ./my-agent -p "Hello" --user-id user@example.com
+```
+
+</CodeGroup>
+
+<Tip>
+  On first run, `lyzr run` creates the agent on Lyzr Studio and saves the ID to `.lyzr_agent_id`. On subsequent runs it reuses the saved ID, so the agent is only created once.
+</Tip>
+
+---
+
+## Related commands
+
+- [run](/cli/run) — Run with the `lyzr` adapter via the unified run command
+- [export](/cli/export) — Preview the Lyzr API payload with `--format lyzr`
+- [validate](/cli/validate) — Validate the agent before deploying to Lyzr

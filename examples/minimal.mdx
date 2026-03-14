@@ -1,0 +1,105 @@
+---
+title: 'Minimal agent example'
+description: 'The absolute minimum: a 2-file agent.yaml + SOUL.md hello-world agent.'
+---
+
+The minimal example is the smallest valid gitagent. It contains exactly two files — the only two that are required by the specification. Everything else in the gitagent structure is optional.
+
+## Directory structure
+
+```
+examples/minimal/
+├── agent.yaml
+└── SOUL.md
+```
+
+## The two required files
+
+### agent.yaml
+
+`agent.yaml` is the only file in a gitagent repository with a strict JSON schema. It defines the agent's identity, version, and description. All other configuration is optional.
+
+```yaml
+spec_version: "0.1.0"
+name: hello-agent
+version: 0.1.0
+description: A minimal hello world agent
+```
+
+<ParamField path="spec_version" type="string" required>
+  The gitagent specification version this manifest targets. Currently `"0.1.0"`.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Agent identifier. Must be lowercase with hyphens — pattern `^[a-z][a-z0-9-]*$`.
+</ParamField>
+
+<ParamField path="version" type="string" required>
+  Semantic version of the agent itself (e.g., `0.1.0`, `1.2.3-beta.1`).
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  One-line description of what the agent does.
+</ParamField>
+
+### SOUL.md
+
+`SOUL.md` defines who the agent *is* — its identity, personality, communication style, and values. Adapters extract this content to build the agent's system prompt.
+
+```markdown
+# Soul
+
+I am a friendly assistant. I help with general questions and tasks, communicating in a clear and approachable manner.
+```
+
+The minimal valid `SOUL.md` is a single paragraph. The file must exist, must not be empty, and must contain real content.
+
+## Why these two files are required
+
+`agent.yaml` answers the question: **what** is this agent? It provides the machine-readable identity that the CLI, validators, and adapters all rely on.
+
+`SOUL.md` answers the question: **who** is this agent? It provides the human-readable identity that becomes the core of every system prompt, regardless of which framework or adapter is used.
+
+Together, these two files are sufficient for `gitagent validate` to pass and for any adapter to produce a working agent.
+
+## How to run
+
+<Steps>
+  <Step title="Install gitagent">
+    ```bash
+    npm install -g gitagent
+    ```
+  </Step>
+  <Step title="Run the minimal agent">
+    ```bash
+    gitagent run -d ./examples/minimal
+    ```
+
+    This launches the agent with the default Claude adapter in interactive mode.
+  </Step>
+  <Step title="Validate the agent">
+    ```bash
+    gitagent validate -d ./examples/minimal
+    ```
+  </Step>
+  <Step title="View agent info">
+    ```bash
+    gitagent info -d ./examples/minimal
+    ```
+  </Step>
+</Steps>
+
+## When to use the minimal template
+
+The minimal template is appropriate when you:
+
+- Are learning the gitagent format and want the simplest possible starting point
+- Are prototyping an agent idea before adding skills, tools, or rules
+- Want to scaffold a new agent and add structure incrementally
+- Are building a sub-agent that inherits most of its behavior from a parent
+
+For a more realistic starting point with skills, tools, and behavioral rules, see the [standard example](/examples/standard).
+
+<Tip>
+  Use `gitagent init --template minimal` to scaffold a new minimal agent in the current directory.
+</Tip>
